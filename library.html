@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Creative Toolbox - My Library</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="library">
+  <header class="navbar">
+    <div class="nav-inner container">
+      <a href="index.html" class="logo">Creative Toolbox 🛠️</a>
+
+      <nav class="nav-links">
+        <a href="index.html" class="nav-link">🌍 Explore</a>
+        <a href="library.html" class="nav-link active">📚 My Library</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container page-content">
+    <section class="hero">
+      <div class="hero-badge">Private space</div>
+      <h1>📚 My Library</h1>
+      <p>Your personal space to save and organize any link from the internet</p>
+
+      <div class="search-wrap">
+        <input
+          id="privateSearch"
+          class="search-input"
+          type="text"
+          placeholder="Search your saved links... (Press /)"
+          autocomplete="off"
+        />
+      </div>
+
+      <div id="libraryStats" class="stats-line"></div>
+    </section>
+
+    <section id="syncBanner" class="panel sync-banner">
+      <div class="sync-head">
+        <div>
+          <h2>Your links are saved in this browser only</h2>
+          <p class="muted">Generate or enter a sync code. For now this works using localStorage only.</p>
+        </div>
+        <button id="toggleSyncBannerBtn" class="icon-btn">—</button>
+      </div>
+
+      <div id="syncBannerBody" class="sync-body">
+        <div class="inline-actions wrap">
+          <button id="generateSyncBtn" class="btn btn-primary">🔑 Generate Sync Code</button>
+          <button id="showEnterCodeBtn" class="btn">🔑 Enter Sync Code</button>
+          <button class="btn btn-disabled" disabled>Sign in with Google (Coming Soon)</button>
+        </div>
+
+        <div id="syncCodeBox" class="sync-code-box hidden">
+          <div class="sync-code-row">
+            <span id="syncCodeText" class="sync-code-text"></span>
+            <button id="copySyncCodeBtn" class="btn">Copy</button>
+          </div>
+          <p class="muted">Save this code! Use it on any device to access your library later.</p>
+        </div>
+
+        <div id="enterCodeWrap" class="inline-actions wrap hidden">
+          <input id="syncCodeInput" type="text" class="input" placeholder="Enter sync code..." />
+          <button id="loadSyncCodeBtn" class="btn btn-primary">Load Library</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel quick-add-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Quick Add</h2>
+          <p class="panel-note">Save links fast and stay organized</p>
+        </div>
+      </div>
+
+      <div class="quick-add-grid">
+        <div class="subpanel">
+          <h3>Add Link</h3>
+          <div class="form-grid">
+            <input id="privateToolName" type="text" class="input" placeholder="Link name" />
+            <input id="privateToolUrl" type="url" class="input" placeholder="https://example.com" />
+            <select id="privateToolCategory" class="input select"></select>
+            <label class="check-row">
+              <input id="privateToolFav" type="checkbox" />
+              <span>Favorite</span>
+            </label>
+            <button id="addPrivateToolBtn" class="btn btn-primary">Add Link</button>
+          </div>
+        </div>
+
+        <div class="subpanel">
+          <h3>Create Category</h3>
+          <div class="form-grid">
+            <input id="privateCategoryName" type="text" class="input" placeholder="Category name" />
+            <button id="createPrivateCategoryBtn" class="btn btn-primary">Create Category</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="privateFavoritesSection" class="section hidden">
+      <div class="section-head">
+        <h2>⭐ My Favorites</h2>
+      </div>
+      <div id="privateFavoritesGrid" class="card-grid"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>My Categories</h2>
+      </div>
+
+      <div id="privateNoResults" class="empty-state hidden"></div>
+      <div id="privateCategoriesContainer"></div>
+    </section>
+
+    <section class="panel data-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Data Management</h2>
+          <p class="panel-note">Export regularly to keep a backup of your links</p>
+        </div>
+      </div>
+
+      <div class="inline-actions wrap">
+        <button id="exportPrivateBtn" class="btn">💾 Export My Library</button>
+        <button id="importPrivateBtn" class="btn">📂 Import Library</button>
+        <input id="importPrivateInput" type="file" accept=".json,application/json" hidden />
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <p>Made with ❤️ | Creative Toolbox</p>
+      <a href="index.html">Explore the public directory →</a>
+    </div>
+  </footer>
+
+  <button id="scrollTopBtn" class="scroll-top-btn" aria-label="Scroll to top">↑</button>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <h3 id="confirmTitle">Confirm</h3>
+      <p id="confirmText">Are you sure?</p>
+      <div class="modal-actions">
+        <button id="confirmCancel" class="btn">Cancel</button>
+        <button id="confirmDelete" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
