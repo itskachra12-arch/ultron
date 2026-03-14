@@ -13,6 +13,7 @@
       <nav class="nav-links">
         <a href="index.html" class="nav-link">🌍 Explore</a>
         <a href="library.html" class="nav-link active">📚 My Library</a>
+        <button id="feedbackOpenBtn" class="nav-link nav-btn-like">✉️ Contact / Feedback</button>
       </nav>
     </div>
   </header>
@@ -135,7 +136,11 @@
   <footer class="footer">
     <div class="container footer-inner">
       <p>Made with ❤️ | Creative Toolbox</p>
-      <a href="index.html">Explore the public directory →</a>
+      <div class="footer-links">
+        <button id="feedbackFooterBtn" class="footer-button-link">✉️ Contact / Feedback</button>
+        <a href="mailto:itskachra12@gmail.com?subject=Creative%20Toolbox%20Feedback">Email Directly</a>
+        <a href="index.html">Explore the public directory →</a>
+      </div>
     </div>
   </footer>
 
@@ -154,6 +159,30 @@
     </div>
   </div>
 
+  <div id="feedbackModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-feedback-modal></div>
+    <div class="modal-card">
+      <h3>✉️ Contact / Feedback</h3>
+      <p>Got a suggestion, tool recommendation, feedback, or issue? Send it here.</p>
+      <p class="muted">You can also email directly at <a href="mailto:itskachra12@gmail.com">itskachra12@gmail.com</a></p>
+      <div class="form-grid">
+        <input id="feedbackName" type="text" class="input" placeholder="Your name (optional)" />
+        <input id="feedbackEmail" type="email" class="input" placeholder="Your email (optional)" />
+        <select id="feedbackType" class="input select">
+          <option value="Suggest a Tool">Suggest a Tool</option>
+          <option value="Send Feedback">Send Feedback</option>
+          <option value="Report an Issue">Report an Issue</option>
+        </select>
+        <textarea id="feedbackMessage" class="input textarea" placeholder="Write your message..." rows="5"></textarea>
+        <div class="modal-actions left">
+          <button id="feedbackCancelBtn" class="btn">Cancel</button>
+          <button id="feedbackSubmitBtn" class="btn btn-primary">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js"></script>
 </body>
 </html>
