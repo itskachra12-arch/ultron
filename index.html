@@ -25,7 +25,13 @@
       <p>Curated collection of free and useful websites, AI tools, and more</p>
 
       <div class="search-wrap">
-        <input id="publicSearch" class="search-input" type="text" placeholder="Search tools or categories... (Press /)" autocomplete="off" />
+        <input
+          id="publicSearch"
+          class="search-input"
+          type="text"
+          placeholder="Search tools or categories... (Press /)"
+          autocomplete="off"
+        />
       </div>
 
       <div id="publicStats" class="stats-line"></div>
@@ -65,7 +71,7 @@
         </div>
 
         <div class="subpanel">
-          <h3>Backup & Restore</h3>
+          <h3>Backup &amp; Restore</h3>
           <div class="inline-actions wrap">
             <button id="exportAllBtn" class="btn">💾 Export All Data</button>
             <button id="importAllBtn" class="btn">📂 Import All Data</button>
@@ -107,6 +113,7 @@
   </footer>
 
   <button id="scrollTopBtn" class="scroll-top-btn" aria-label="Scroll to top">↑</button>
+
   <div id="toastContainer" class="toast-container"></div>
 
   <div id="confirmModal" class="modal hidden">
@@ -125,12 +132,13 @@
     <div class="modal-backdrop" data-close-admin-modal></div>
     <div class="modal-card">
       <h3>Admin Access</h3>
-      <p>Enter your admin password to manage the public directory.</p>
+      <p>Log in with your admin account to manage the public directory.</p>
       <div class="form-grid">
+        <input id="adminEmailInput" type="email" class="input" placeholder="Admin email" />
         <input id="adminPasswordInput" type="password" class="input" placeholder="Admin password" />
         <div class="modal-actions left">
           <button id="adminCancelBtn" class="btn">Cancel</button>
-          <button id="adminLoginBtn" class="btn btn-primary">Enter Admin Mode</button>
+          <button id="adminLoginBtn" class="btn btn-primary">Login</button>
         </div>
       </div>
     </div>
