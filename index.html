@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Creative Toolbox</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="home">
+  <header class="navbar">
+    <div class="nav-inner container">
+      <a href="index.html" class="logo">Creative Toolbox 🛠️</a>
+
+      <nav class="nav-links">
+        <a href="index.html" class="nav-link active">🌍 Explore</a>
+        <a href="library.html" class="nav-link">📚 My Library</a>
+        <button id="adminToggleBtn" class="nav-admin-btn">🔒 Admin</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container page-content">
+    <section class="hero">
+      <div class="hero-badge">Public directory</div>
+      <h1>Discover the best tools &amp; resources on the internet</h1>
+      <p>Curated collection of free and useful websites, AI tools, and more</p>
+
+      <div class="search-wrap">
+        <input
+          id="publicSearch"
+          class="search-input"
+          type="text"
+          placeholder="Search tools or categories... (Press /)"
+          autocomplete="off"
+        />
+      </div>
+
+      <div id="publicStats" class="stats-line"></div>
+    </section>
+
+    <section id="adminPanelSection" class="panel admin-panel hidden">
+      <div class="panel-header">
+        <div>
+          <h2>Admin Panel</h2>
+          <p class="panel-note">Manage the public curated directory</p>
+        </div>
+        <span class="admin-badge">Admin Mode Active</span>
+      </div>
+
+      <div class="admin-grid">
+        <div class="subpanel">
+          <h3>Create Category</h3>
+          <div class="form-grid">
+            <input id="publicCategoryName" type="text" class="input" placeholder="Category name" />
+            <input id="publicCategoryDesc" type="text" class="input" placeholder="Category description" />
+            <button id="createPublicCategoryBtn" class="btn btn-primary">Create Category</button>
+          </div>
+        </div>
+
+        <div class="subpanel">
+          <h3>Add Tool</h3>
+          <div class="form-grid">
+            <input id="publicToolName" type="text" class="input" placeholder="Tool name" />
+            <input id="publicToolUrl" type="url" class="input" placeholder="https://example.com" />
+            <select id="publicToolCategory" class="input select"></select>
+            <label class="check-row">
+              <input id="publicToolFav" type="checkbox" />
+              <span>Featured / Favorite</span>
+            </label>
+            <button id="addPublicToolBtn" class="btn btn-primary">Add Tool</button>
+          </div>
+        </div>
+
+        <div class="subpanel">
+          <h3>Backup & Restore</h3>
+          <div class="inline-actions wrap">
+            <button id="exportAllBtn" class="btn">💾 Export All Data</button>
+            <button id="importAllBtn" class="btn">📂 Import All Data</button>
+            <input id="importAllInput" type="file" accept=".json,application/json" hidden />
+          </div>
+          <p class="muted">Exports public + private data together as a full backup.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="publicFavoritesSection" class="section hidden">
+      <div class="section-head">
+        <h2>⭐ Featured Tools</h2>
+      </div>
+      <div id="publicFavoritesGrid" class="card-grid"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Explore Categories</h2>
+      </div>
+
+      <div id="publicNoResults" class="empty-state hidden"></div>
+      <div id="publicCategoriesContainer"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <p>Made with ❤️ | Creative Toolbox</p>
+      <a href="library.html">Want your own private library? → Go to My Library</a>
+    </div>
+  </footer>
+
+  <button id="scrollTopBtn" class="scroll-top-btn" aria-label="Scroll to top">↑</button>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <h3 id="confirmTitle">Confirm</h3>
+      <p id="confirmText">Are you sure?</p>
+      <div class="modal-actions">
+        <button id="confirmCancel" class="btn">Cancel</button>
+        <button id="confirmDelete" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-admin-modal></div>
+    <div class="modal-card">
+      <h3>Admin Access</h3>
+      <p>Enter your admin password to manage the public directory.</p>
+      <div class="form-grid">
+        <input id="adminPasswordInput" type="password" class="input" placeholder="Admin password" />
+        <div class="modal-actions left">
+          <button id="adminCancelBtn" class="btn">Cancel</button>
+          <button id="adminLoginBtn" class="btn btn-primary">Enter Admin Mode</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="editToolModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-edit-modal></div>
+    <div class="modal-card">
+      <h3>Edit Tool</h3>
+      <p>Update the tool details below.</p>
+      <div class="form-grid">
+        <input id="editToolName" type="text" class="input" placeholder="Tool name" />
+        <input id="editToolUrl" type="url" class="input" placeholder="https://example.com" />
+        <select id="editToolCategory" class="input select"></select>
+        <label class="check-row">
+          <input id="editToolFav" type="checkbox" />
+          <span>Featured / Favorite</span>
+        </label>
+        <div class="modal-actions left">
+          <button id="editCancelBtn" class="btn">Cancel</button>
+          <button id="editSaveBtn" class="btn btn-primary">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
