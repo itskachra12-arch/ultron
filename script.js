@@ -495,6 +495,7 @@ function renderHome() {
   const tools = getJSON(KEYS.publicTools);
   const collapsed = getJSON(KEYS.homeCollapsed, {});
   const searchTerm = (document.getElementById("publicSearch")?.value || "").trim().toLowerCase();
+  const isSearching = searchTerm.length > 0;
 
   const adminPanel = document.getElementById("adminPanelSection");
   const categoriesContainer = document.getElementById("publicCategoriesContainer");
@@ -518,7 +519,7 @@ function renderHome() {
   });
 
   const favorites = matchingTools.filter(tool => tool.fav);
-  if (favorites.length) {
+  if (favorites.length && !isSearching) {
     favoritesSection.classList.remove("hidden");
     favorites.forEach(tool => favoritesGrid.appendChild(createLinkCard(tool, "public")));
   } else {
@@ -539,6 +540,10 @@ function renderHome() {
 
   categories.forEach((cat, catIndex) => {
     const catTools = matchingTools.filter(tool => tool.cat === cat.name);
+
+    // THE FIX: completely hide category if zero matches during search
+    if (isSearching && catTools.length === 0) return;
+
     totalVisible += catTools.length;
 
     const block = document.createElement("div");
@@ -598,14 +603,17 @@ function renderHome() {
       actions.append(upBtn, downBtn, delBtn);
     }
 
-    const arrow = createMiniButton(collapsed[cat.name] ? "▸" : "▾", "Toggle category", null);
+    // THE FIX: automatically expand categories during search
+    const isCollapsed = isSearching ? false : collapsed[cat.name];
+
+    const arrow = createMiniButton(isCollapsed ? "▸" : "▾", "Toggle category", null);
     actions.appendChild(arrow);
 
     head.append(left, actions);
 
     const content = document.createElement("div");
     content.className = "category-content";
-    if (collapsed[cat.name]) content.classList.add("hidden");
+    if (isCollapsed) content.classList.add("hidden");
 
     if (catTools.length) {
       const grid = document.createElement("div");
@@ -627,12 +635,16 @@ function renderHome() {
     categoriesContainer.appendChild(block);
   });
 
-  if (searchTerm && totalVisible === 0) {
+  if (isSearching && totalVisible === 0) {
     noResults.classList.remove("hidden");
     noResults.innerHTML = `
       <div class="empty-emoji">🔍</div>
       <strong>No results found for "${escapeHtml(searchTerm)}"</strong>
     `;
+  }
+
+  if (isSearching) {
+    stats.textContent = `${totalVisible} results found for "${escapeHtml(searchTerm)}"`;
   }
 }
 
@@ -783,6 +795,7 @@ function renderLibrary() {
   const tools = getJSON(KEYS.privateTools);
   const collapsed = getJSON(KEYS.libraryCollapsed, {});
   const searchTerm = (document.getElementById("privateSearch")?.value || "").trim().toLowerCase();
+  const isSearching = searchTerm.length > 0;
 
   const categoriesContainer = document.getElementById("privateCategoriesContainer");
   const favoritesSection = document.getElementById("privateFavoritesSection");
@@ -805,7 +818,7 @@ function renderLibrary() {
   });
 
   const favorites = matchingTools.filter(tool => tool.fav);
-  if (favorites.length) {
+  if (favorites.length && !isSearching) {
     favoritesSection.classList.remove("hidden");
     favorites.forEach(tool => favoritesGrid.appendChild(createLinkCard(tool, "private")));
   } else {
@@ -828,6 +841,9 @@ function renderLibrary() {
 
   categories.forEach((cat, catIndex) => {
     const catTools = matchingTools.filter(tool => tool.cat === cat.name);
+
+    if (isSearching && catTools.length === 0) return;
+
     totalVisible += catTools.length;
 
     const block = document.createElement("div");
@@ -871,7 +887,8 @@ function renderLibrary() {
       });
     });
 
-    const arrow = createMiniButton(collapsed[cat.name] ? "▸" : "▾", "Toggle category", null);
+    const isCollapsed = isSearching ? false : collapsed[cat.name];
+    const arrow = createMiniButton(isCollapsed ? "▸" : "▾", "Toggle category", null);
 
     actions.append(upBtn, downBtn, delBtn, arrow);
 
@@ -879,7 +896,7 @@ function renderLibrary() {
 
     const content = document.createElement("div");
     content.className = "category-content";
-    if (collapsed[cat.name]) content.classList.add("hidden");
+    if (isCollapsed) content.classList.add("hidden");
 
     if (catTools.length) {
       const grid = document.createElement("div");
@@ -901,12 +918,16 @@ function renderLibrary() {
     categoriesContainer.appendChild(block);
   });
 
-  if (searchTerm && totalVisible === 0) {
+  if (isSearching && totalVisible === 0) {
     noResults.classList.remove("hidden");
     noResults.innerHTML = `
       <div class="empty-emoji">🔍</div>
       <strong>No results found for "${escapeHtml(searchTerm)}"</strong>
     `;
+  }
+
+  if (isSearching) {
+    stats.textContent = `${totalVisible} results found for "${escapeHtml(searchTerm)}"`;
   }
 }
 
