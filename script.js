@@ -1,39 +1,35 @@
 const ADMIN_PASSWORD = "creative123";
 
+const SUPABASE_URL = "https://tgszbddlpxbnapkqyzoc.supabase.co";
+const SUPABASE_KEY = "sb_publishable_BbL3AlsiK4tmJpoaXZ8Png__59P2x0v";
+
+const supabaseClient = window.supabase
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null;
+
 const KEYS = {
-  publicCategories: "publicCategories",
-  publicTools: "publicTools",
   privateCategories: "privateCategories",
   privateTools: "privateTools",
-  homeCollapsed: "homeCollapsedCategories",
   libraryCollapsed: "libraryCollapsedCategories",
   syncBannerCollapsed: "syncBannerCollapsed"
 };
-
-const DEFAULT_PUBLIC_CATEGORIES = [
-  { name: "AI Video Tools", desc: "Tools for generating videos using AI" },
-  { name: "Design Resources", desc: "Free design tools and assets" }
-];
-
-const DEFAULT_PUBLIC_TOOLS = [
-  { name: "Runway", link: "https://runway.ml", cat: "AI Video Tools", fav: true },
-  { name: "Canva", link: "https://canva.com", cat: "Design Resources", fav: false }
-];
 
 let isAdmin = false;
 let confirmCallback = null;
 let editingPublicToolId = null;
 
-document.addEventListener("DOMContentLoaded", () => {
-  seedDefaults();
+/* ---------------- init ---------------- */
+
+document.addEventListener("DOMContentLoaded", async () => {
+  seedPrivateDefaults();
   setupSharedUI();
 
   const page = document.body.dataset.page;
-  if (page === "home") initHomePage();
+  if (page === "home") await initHomePage();
   if (page === "library") initLibraryPage();
 });
 
-/* ---------- storage ---------- */
+/* ---------------- local helpers ---------------- */
 
 function getJSON(key, fallback = []) {
   try {
@@ -52,42 +48,13 @@ function generateId() {
   return "id_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-function withIds(items) {
-  return items.map(item => ({ id: item.id || generateId(), ...item }));
-}
-
-function normalizeToolIds(key) {
-  const tools = getJSON(key);
-  let changed = false;
-  const next = tools.map(tool => {
-    if (!tool.id) {
-      changed = true;
-      return { ...tool, id: generateId() };
-    }
-    return tool;
-  });
-  if (changed) setJSON(key, next);
-}
-
-function seedDefaults() {
-  if (!localStorage.getItem(KEYS.publicCategories)) {
-    setJSON(KEYS.publicCategories, DEFAULT_PUBLIC_CATEGORIES);
-  }
-  if (!localStorage.getItem(KEYS.publicTools)) {
-    setJSON(KEYS.publicTools, withIds(DEFAULT_PUBLIC_TOOLS));
-  } else {
-    normalizeToolIds(KEYS.publicTools);
-  }
-
+function seedPrivateDefaults() {
   if (!localStorage.getItem(KEYS.privateCategories)) setJSON(KEYS.privateCategories, []);
   if (!localStorage.getItem(KEYS.privateTools)) setJSON(KEYS.privateTools, []);
-  else normalizeToolIds(KEYS.privateTools);
-
-  if (!localStorage.getItem(KEYS.homeCollapsed)) setJSON(KEYS.homeCollapsed, {});
   if (!localStorage.getItem(KEYS.libraryCollapsed)) setJSON(KEYS.libraryCollapsed, {});
 }
 
-/* ---------- shared ui ---------- */
+/* ---------------- shared ui ---------------- */
 
 function setupSharedUI() {
   setupToasts();
@@ -195,14 +162,15 @@ function setupEditModal() {
     editingPublicToolId = null;
   }
 
-  window.openEditToolModal = function (tool) {
+  window.openEditToolModal = async function (tool) {
     editingPublicToolId = tool.id;
     document.getElementById("editToolName").value = tool.name || "";
     document.getElementById("editToolUrl").value = tool.link || "";
     document.getElementById("editToolFav").checked = !!tool.fav;
 
+    const categories = await fetchPublicCategories();
     const select = document.getElementById("editToolCategory");
-    updateSelectOptions(select, getJSON(KEYS.publicCategories), "Select category");
+    updateSelectOptions(select, categories, "Select category");
     select.value = tool.cat || "";
 
     modal.classList.remove("hidden");
@@ -211,7 +179,7 @@ function setupEditModal() {
   cancelBtn?.addEventListener("click", close);
   backdrop?.addEventListener("click", close);
 
-  saveBtn?.addEventListener("click", () => {
+  saveBtn?.addEventListener("click", async () => {
     const name = document.getElementById("editToolName").value.trim();
     const link = sanitizeUrl(document.getElementById("editToolUrl").value.trim());
     const cat = document.getElementById("editToolCategory").value;
@@ -221,13 +189,15 @@ function setupEditModal() {
     if (!isValidUrl(link)) return showToast("Please enter a valid URL!", "error");
     if (!cat) return showToast("Please select a category!", "error");
 
-    const tools = getJSON(KEYS.publicTools).map(tool =>
-      tool.id === editingPublicToolId ? { ...tool, name, link, cat, fav } : tool
-    );
+    const { error } = await supabaseClient
+      .from("public_tools")
+      .update({ name, link, cat, fav })
+      .eq("id", editingPublicToolId);
 
-    setJSON(KEYS.publicTools, tools);
+    if (error) return showToast("Could not update tool", "error");
+
     close();
-    renderHome();
+    await renderHome();
     showToast("Tool updated!", "success");
   });
 }
@@ -259,7 +229,7 @@ function setupKeyboardShortcut() {
   });
 }
 
-/* ---------- helpers ---------- */
+/* ---------------- helpers ---------------- */
 
 function sanitizeUrl(url) {
   if (!url) return "";
@@ -359,7 +329,7 @@ function parseJSONFile(file, onSuccess) {
   reader.readAsText(file);
 }
 
-function moveCategory(key, index, direction) {
+function moveLocalCategory(key, index, direction) {
   const arr = getJSON(key);
   const newIndex = index + direction;
   if (newIndex < 0 || newIndex >= arr.length) return;
@@ -371,6 +341,7 @@ function scoreTool(tool, term) {
   const name = tool.name.toLowerCase();
   const cat = tool.cat.toLowerCase();
 
+  if (!term) return 0;
   if (name === term) return 100;
   if (name.startsWith(term)) return 90;
   if (name.includes(term)) return 75;
@@ -380,9 +351,41 @@ function scoreTool(tool, term) {
   return 0;
 }
 
-/* ---------- home ---------- */
+/* ---------------- supabase public data ---------------- */
 
-function initHomePage() {
+async function fetchPublicCategories() {
+  const { data, error } = await supabaseClient
+    .from("public_categories")
+    .select("*")
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    showToast("Could not load public categories", "error");
+    return [];
+  }
+
+  return data || [];
+}
+
+async function fetchPublicTools() {
+  const { data, error } = await supabaseClient
+    .from("public_tools")
+    .select("*")
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    showToast("Could not load public tools", "error");
+    return [];
+  }
+
+  return data || [];
+}
+
+/* ---------------- home page ---------------- */
+
+async function initHomePage() {
   const adminBtn = document.getElementById("adminToggleBtn");
   const createCategoryBtn = document.getElementById("createPublicCategoryBtn");
   const addToolBtn = document.getElementById("addPublicToolBtn");
@@ -393,7 +396,7 @@ function initHomePage() {
   const publicToolUrl = document.getElementById("publicToolUrl");
   const publicToolName = document.getElementById("publicToolName");
 
-  renderHome();
+  await renderHome();
 
   adminBtn?.addEventListener("click", () => {
     if (isAdmin) {
@@ -405,26 +408,36 @@ function initHomePage() {
     }
   });
 
-  createCategoryBtn?.addEventListener("click", () => {
+  createCategoryBtn?.addEventListener("click", async () => {
     const name = document.getElementById("publicCategoryName").value.trim();
     const desc = document.getElementById("publicCategoryDesc").value.trim();
+
     if (!name) return showToast("Name required!", "error");
 
-    const categories = getJSON(KEYS.publicCategories);
-    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
-      return showToast("Category already exists!", "error");
-    }
+    const categories = await fetchPublicCategories();
+    const highestSort = categories.length ? Math.max(...categories.map(c => c.sort_order || 0)) : 0;
 
-    categories.push({ name, desc });
-    setJSON(KEYS.publicCategories, categories);
+    const { error } = await supabaseClient.from("public_categories").insert({
+      name,
+      desc,
+      sort_order: highestSort + 1
+    });
+
+    if (error) {
+      if (String(error.message).toLowerCase().includes("duplicate")) {
+        return showToast("Category already exists!", "error");
+      }
+      return showToast("Could not create category", "error");
+    }
 
     document.getElementById("publicCategoryName").value = "";
     document.getElementById("publicCategoryDesc").value = "";
-    renderHome();
+
+    await renderHome();
     showToast("Category created!", "success");
   });
 
-  addToolBtn?.addEventListener("click", () => {
+  addToolBtn?.addEventListener("click", async () => {
     const name = publicToolName.value.trim();
     const link = sanitizeUrl(publicToolUrl.value.trim());
     const cat = document.getElementById("publicToolCategory").value;
@@ -434,15 +447,24 @@ function initHomePage() {
     if (!isValidUrl(link)) return showToast("Please enter a valid URL!", "error");
     if (!cat) return showToast("Please select a category!", "error");
 
-    const tools = getJSON(KEYS.publicTools);
-    tools.push({ id: generateId(), name, link, cat, fav });
-    setJSON(KEYS.publicTools, tools);
+    const tools = await fetchPublicTools();
+    const highestSort = tools.length ? Math.max(...tools.map(t => t.sort_order || 0)) : 0;
+
+    const { error } = await supabaseClient.from("public_tools").insert({
+      name,
+      link,
+      cat,
+      fav,
+      sort_order: highestSort + 1
+    });
+
+    if (error) return showToast("Could not add tool", "error");
 
     publicToolName.value = "";
     publicToolUrl.value = "";
     document.getElementById("publicToolFav").checked = false;
 
-    renderHome();
+    await renderHome();
     showToast("Tool added!", "success");
   });
 
@@ -454,32 +476,63 @@ function initHomePage() {
 
   searchInput?.addEventListener("input", renderHome);
 
-  exportAllBtn?.addEventListener("click", () => {
-    downloadJSON("toolbox-full-backup.json", {
-      publicCategories: getJSON(KEYS.publicCategories),
-      publicTools: getJSON(KEYS.publicTools),
+  exportAllBtn?.addEventListener("click", async () => {
+    const data = {
+      publicCategories: await fetchPublicCategories(),
+      publicTools: await fetchPublicTools(),
       privateCategories: getJSON(KEYS.privateCategories),
       privateTools: getJSON(KEYS.privateTools)
-    });
+    };
+    downloadJSON("toolbox-full-backup.json", data);
     showToast("Data exported!", "success");
   });
 
   importAllBtn?.addEventListener("click", () => importAllInput.click());
+
   importAllInput?.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    parseJSONFile(file, (data) => {
+    parseJSONFile(file, async (data) => {
       if (!data.publicCategories || !data.publicTools || !data.privateCategories || !data.privateTools) {
         return showToast("Invalid file. Please select a valid backup file.", "error");
       }
 
-      setJSON(KEYS.publicCategories, data.publicCategories);
-      setJSON(KEYS.publicTools, withIds(data.publicTools));
-      setJSON(KEYS.privateCategories, data.privateCategories);
-      setJSON(KEYS.privateTools, withIds(data.privateTools));
+      const { error: delToolsError } = await supabaseClient.from("public_tools").delete().gte("id", 0);
+      const { error: delCatsError } = await supabaseClient.from("public_categories").delete().gte("id", 0);
 
-      renderHome();
+      if (delToolsError || delCatsError) {
+        return showToast("Could not replace public data", "error");
+      }
+
+      if (data.publicCategories.length) {
+        const { error } = await supabaseClient.from("public_categories").insert(
+          data.publicCategories.map((c, i) => ({
+            name: c.name,
+            desc: c.desc || "",
+            sort_order: c.sort_order ?? i + 1
+          }))
+        );
+        if (error) return showToast("Could not import categories", "error");
+      }
+
+      if (data.publicTools.length) {
+        const { error } = await supabaseClient.from("public_tools").insert(
+          data.publicTools.map((t, i) => ({
+            name: t.name,
+            link: t.link,
+            cat: t.cat,
+            fav: !!t.fav,
+            sort_order: t.sort_order ?? i + 1
+          }))
+        );
+        if (error) return showToast("Could not import tools", "error");
+      }
+
+      setJSON(KEYS.privateCategories, data.privateCategories);
+      setJSON(KEYS.privateTools, data.privateTools);
+
+      await renderHome();
       showToast("Data imported successfully", "info");
     });
 
@@ -487,10 +540,9 @@ function initHomePage() {
   });
 }
 
-function renderHome() {
-  const categories = getJSON(KEYS.publicCategories);
-  const tools = getJSON(KEYS.publicTools);
-  const collapsed = getJSON(KEYS.homeCollapsed, {});
+async function renderHome() {
+  const categories = await fetchPublicCategories();
+  const tools = await fetchPublicTools();
   const searchTerm = (document.getElementById("publicSearch")?.value || "").trim().toLowerCase();
   const isSearching = searchTerm.length > 0;
 
@@ -501,7 +553,6 @@ function renderHome() {
   const categoriesContainer = document.getElementById("publicCategoriesContainer");
   const searchSection = document.getElementById("publicSearchSection");
   const searchResults = document.getElementById("publicSearchResults");
-  const searchTitle = document.getElementById("publicSearchTitle");
   const noResults = document.getElementById("publicNoResults");
   const stats = document.getElementById("publicStats");
   const publicToolCategory = document.getElementById("publicToolCategory");
@@ -539,8 +590,6 @@ function renderHome() {
     favoritesSection.classList.add("hidden");
     categoriesSection.classList.add("hidden");
     searchSection.classList.remove("hidden");
-
-    searchTitle.textContent = `Search Results`;
     stats.textContent = `${matchingTools.length} results found for "${searchTerm}"`;
 
     if (!matchingTools.length) {
@@ -561,6 +610,7 @@ function renderHome() {
 
   searchSection.classList.add("hidden");
   categoriesSection.classList.remove("hidden");
+  stats.textContent = `${tools.length} public links across ${categories.length} categories`;
 
   const favorites = tools.filter(tool => tool.fav);
   if (favorites.length) {
@@ -569,8 +619,6 @@ function renderHome() {
   } else {
     favoritesSection.classList.add("hidden");
   }
-
-  stats.textContent = `${tools.length} public links across ${categories.length} categories`;
 
   categories.forEach((cat, catIndex) => {
     const catTools = tools.filter(tool => tool.cat === cat.name);
@@ -596,6 +644,7 @@ function renderHome() {
     info.className = "info-icon";
     info.type = "button";
     info.innerHTML = "ⓘ";
+
     const tooltip = document.createElement("span");
     tooltip.className = "tooltip";
     tooltip.textContent = cat.desc || "No description";
@@ -608,34 +657,46 @@ function renderHome() {
     actions.className = "category-actions";
 
     if (isAdmin) {
-      actions.append(
-        createMiniButton("↑", "Move up", (e) => {
-          e.stopPropagation();
-          moveCategory(KEYS.publicCategories, catIndex, -1);
-          renderHome();
-        }),
-        createMiniButton("↓", "Move down", (e) => {
-          e.stopPropagation();
-          moveCategory(KEYS.publicCategories, catIndex, 1);
-          renderHome();
-        }),
-        createMiniButton("🗑", "Delete category", (e) => {
-          e.stopPropagation();
-          showConfirm("Delete this category?", "Delete this category and all tools inside?", () => {
-            deletePublicCategory(cat.name);
-          });
-        })
-      );
+      const upBtn = createMiniButton("↑", "Move up", async (e) => {
+        e.stopPropagation();
+        if (catIndex === 0) return;
+
+        const prev = categories[catIndex - 1];
+        await supabaseClient.from("public_categories").update({ sort_order: prev.sort_order }).eq("id", cat.id);
+        await supabaseClient.from("public_categories").update({ sort_order: cat.sort_order }).eq("id", prev.id);
+        await renderHome();
+      });
+
+      const downBtn = createMiniButton("↓", "Move down", async (e) => {
+        e.stopPropagation();
+        if (catIndex === categories.length - 1) return;
+
+        const next = categories[catIndex + 1];
+        await supabaseClient.from("public_categories").update({ sort_order: next.sort_order }).eq("id", cat.id);
+        await supabaseClient.from("public_categories").update({ sort_order: cat.sort_order }).eq("id", next.id);
+        await renderHome();
+      });
+
+      const delBtn = createMiniButton("🗑", "Delete category", (e) => {
+        e.stopPropagation();
+        showConfirm("Delete this category?", "Delete this category and all tools inside?", async () => {
+          await supabaseClient.from("public_tools").delete().eq("cat", cat.name);
+          await supabaseClient.from("public_categories").delete().eq("id", cat.id);
+          await renderHome();
+          showToast("Category deleted!", "success");
+        });
+      });
+
+      actions.append(upBtn, downBtn, delBtn);
     }
 
-    const isCollapsed = !!collapsed[cat.name];
-    actions.appendChild(createMiniButton(isCollapsed ? "▸" : "▾", "Toggle category", null));
+    const arrow = createMiniButton("▾", "Expanded", null);
+    actions.appendChild(arrow);
 
     head.append(left, actions);
 
     const content = document.createElement("div");
     content.className = "category-content";
-    if (isCollapsed) content.classList.add("hidden");
 
     if (catTools.length) {
       const grid = document.createElement("div");
@@ -646,26 +707,12 @@ function renderHome() {
       content.innerHTML = `<div class="empty-inline">No tools in this category yet</div>`;
     }
 
-    head.addEventListener("click", () => {
-      const state = getJSON(KEYS.homeCollapsed, {});
-      state[cat.name] = !state[cat.name];
-      setJSON(KEYS.homeCollapsed, state);
-      renderHome();
-    });
-
     block.append(head, content);
     categoriesContainer.appendChild(block);
   });
 }
 
-function deletePublicCategory(categoryName) {
-  setJSON(KEYS.publicCategories, getJSON(KEYS.publicCategories).filter(c => c.name !== categoryName));
-  setJSON(KEYS.publicTools, getJSON(KEYS.publicTools).filter(t => t.cat !== categoryName));
-  renderHome();
-  showToast("Category deleted!", "success");
-}
-
-/* ---------- library ---------- */
+/* ---------------- library page ---------------- */
 
 function initLibraryPage() {
   const createCategoryBtn = document.getElementById("createPrivateCategoryBtn");
@@ -750,7 +797,7 @@ function initLibraryPage() {
       }
 
       setJSON(KEYS.privateCategories, data.privateCategories);
-      setJSON(KEYS.privateTools, withIds(data.privateTools));
+      setJSON(KEYS.privateTools, data.privateTools);
       renderLibrary();
       showToast("Data imported successfully", "info");
     });
@@ -762,7 +809,9 @@ function initLibraryPage() {
   showEnterCodeBtn?.addEventListener("click", () => {
     document.getElementById("enterCodeWrap").classList.toggle("hidden");
   });
+
   loadSyncCodeBtn?.addEventListener("click", loadFromSyncCode);
+
   copySyncCodeBtn?.addEventListener("click", async () => {
     const code = document.getElementById("syncCodeText").textContent.trim();
     if (!code) return;
@@ -804,7 +853,6 @@ function renderLibrary() {
   const categoriesContainer = document.getElementById("privateCategoriesContainer");
   const searchSection = document.getElementById("privateSearchSection");
   const searchResults = document.getElementById("privateSearchResults");
-  const searchTitle = document.getElementById("privateSearchTitle");
   const noResults = document.getElementById("privateNoResults");
   const stats = document.getElementById("libraryStats");
   const privateToolCategory = document.getElementById("privateToolCategory");
@@ -843,7 +891,6 @@ function renderLibrary() {
     favoritesSection.classList.add("hidden");
     categoriesSection.classList.add("hidden");
     searchSection.classList.remove("hidden");
-    searchTitle.textContent = `Search Results`;
     stats.textContent = `${matchingTools.length} results found for "${searchTerm}"`;
 
     if (!matchingTools.length) {
@@ -899,33 +946,34 @@ function renderLibrary() {
     const actions = document.createElement("div");
     actions.className = "category-actions";
 
-    actions.append(
-      createMiniButton("↑", "Move up", (e) => {
-        e.stopPropagation();
-        moveCategory(KEYS.privateCategories, catIndex, -1);
-        renderLibrary();
-      }),
-      createMiniButton("↓", "Move down", (e) => {
-        e.stopPropagation();
-        moveCategory(KEYS.privateCategories, catIndex, 1);
-        renderLibrary();
-      }),
-      createMiniButton("🗑", "Delete category", (e) => {
-        e.stopPropagation();
-        showConfirm("Delete this category?", "Delete this category and all tools inside?", () => {
-          deletePrivateCategory(cat.name);
-        });
-      })
-    );
+    const upBtn = createMiniButton("↑", "Move up", (e) => {
+      e.stopPropagation();
+      moveLocalCategory(KEYS.privateCategories, catIndex, -1);
+      renderLibrary();
+    });
 
-    const isCollapsed = !!collapsed[cat.name];
-    actions.appendChild(createMiniButton(isCollapsed ? "▸" : "▾", "Toggle category", null));
+    const downBtn = createMiniButton("↓", "Move down", (e) => {
+      e.stopPropagation();
+      moveLocalCategory(KEYS.privateCategories, catIndex, 1);
+      renderLibrary();
+    });
+
+    const delBtn = createMiniButton("🗑", "Delete category", (e) => {
+      e.stopPropagation();
+      showConfirm("Delete this category?", "Delete this category and all tools inside?", () => {
+        deletePrivateCategory(cat.name);
+      });
+    });
+
+    const arrow = createMiniButton(collapsed[cat.name] ? "▸" : "▾", "Toggle category", null);
+
+    actions.append(upBtn, downBtn, delBtn, arrow);
 
     head.append(left, actions);
 
     const content = document.createElement("div");
     content.className = "category-content";
-    if (isCollapsed) content.classList.add("hidden");
+    if (collapsed[cat.name]) content.classList.add("hidden");
 
     if (catTools.length) {
       const grid = document.createElement("div");
@@ -955,7 +1003,7 @@ function deletePrivateCategory(categoryName) {
   showToast("Category deleted!", "success");
 }
 
-/* ---------- sync ---------- */
+/* ---------------- sync ---------------- */
 
 function generateSyncCode() {
   const adjectives = ["blue", "bright", "silent", "golden", "cosmic", "rapid", "lucky", "clever"];
@@ -987,7 +1035,7 @@ function loadFromSyncCode() {
   try {
     const data = JSON.parse(raw);
     setJSON(KEYS.privateCategories, data.privateCategories || []);
-    setJSON(KEYS.privateTools, withIds(data.privateTools || []));
+    setJSON(KEYS.privateTools, data.privateTools || []);
     renderLibrary();
     showToast("Library loaded from sync code!", "info");
   } catch {
@@ -995,7 +1043,7 @@ function loadFromSyncCode() {
   }
 }
 
-/* ---------- cards ---------- */
+/* ---------------- cards ---------------- */
 
 function createLinkCard(tool, type, showCategory = false) {
   const card = document.createElement("div");
@@ -1007,11 +1055,12 @@ function createLinkCard(tool, type, showCategory = false) {
   const topLeft = document.createElement("div");
   topLeft.className = "top-left-stack";
 
-  const fav = document.createElement("div");
-  fav.className = "favorite-badge";
-  fav.textContent = tool.fav ? "⭐" : "";
-
-  if (tool.fav) topLeft.appendChild(fav);
+  if (tool.fav) {
+    const fav = document.createElement("div");
+    fav.className = "favorite-badge";
+    fav.textContent = "⭐";
+    topLeft.appendChild(fav);
+  }
 
   if (showCategory) {
     const chip = document.createElement("div");
@@ -1030,8 +1079,15 @@ function createLinkCard(tool, type, showCategory = false) {
 
   deleteBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    showConfirm("Delete this tool?", "This action cannot be undone.", () => {
-      deleteTool(tool.id, type);
+    showConfirm("Delete this tool?", "This action cannot be undone.", async () => {
+      if (type === "public") {
+        const { error } = await supabaseClient.from("public_tools").delete().eq("id", tool.id);
+        if (error) return showToast("Could not delete tool", "error");
+        await renderHome();
+      } else {
+        deletePrivateTool(tool.id);
+      }
+      showToast("Tool deleted!", "success");
     });
   });
 
@@ -1071,10 +1127,23 @@ function createLinkCard(tool, type, showCategory = false) {
     const favBtn = document.createElement("button");
     favBtn.className = "card-action-btn";
     favBtn.textContent = tool.fav ? "Unfavorite" : "Favorite";
-    favBtn.addEventListener("click", (e) => {
+
+    favBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
-      toggleFavorite(tool.id, type);
+
+      if (type === "public") {
+        const { error } = await supabaseClient
+          .from("public_tools")
+          .update({ fav: !tool.fav })
+          .eq("id", tool.id);
+
+        if (error) return showToast("Could not update favorite", "error");
+        await renderHome();
+      } else {
+        togglePrivateFavorite(tool.id);
+      }
     });
+
     actions.appendChild(favBtn);
 
     if (type === "public" && isAdmin) {
@@ -1098,20 +1167,18 @@ function createLinkCard(tool, type, showCategory = false) {
   return card;
 }
 
-function deleteTool(id, type) {
-  const key = type === "public" ? KEYS.publicTools : KEYS.privateTools;
-  setJSON(key, getJSON(key).filter(tool => tool.id !== id));
-  if (type === "public") renderHome();
-  else renderLibrary();
-  showToast("Tool deleted!", "success");
+function deletePrivateTool(id) {
+  const tools = getJSON(KEYS.privateTools).filter(tool => tool.id !== id);
+  setJSON(KEYS.privateTools, tools);
+  renderLibrary();
 }
 
-function toggleFavorite(id, type) {
-  const key = type === "public" ? KEYS.publicTools : KEYS.privateTools;
-  const next = getJSON(key).map(tool => tool.id === id ? { ...tool, fav: !tool.fav } : tool);
-  setJSON(key, next);
-  if (type === "public") renderHome();
-  else renderLibrary();
+function togglePrivateFavorite(id) {
+  const tools = getJSON(KEYS.privateTools).map(tool =>
+    tool.id === id ? { ...tool, fav: !tool.fav } : tool
+  );
+  setJSON(KEYS.privateTools, tools);
+  renderLibrary();
 }
 
 function createMiniButton(text, title, handler) {
