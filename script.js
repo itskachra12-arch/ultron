@@ -1,5 +1,3 @@
-const ADMIN_PASSWORD = "creative123";
-
 const SUPABASE_URL = "https://tgszbddlpxbnapkqyzoc.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnc3piZGRscHhibmFwa3F5em9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTExNjUsImV4cCI6MjA4OTAyNzE2NX0.NDz8CgSjsBmWP-oF3Jb-yRbTZE0JkjBsly98SVcFs-Q";
 
@@ -22,10 +20,68 @@ document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
   setupSharedUI();
 
+  // Check if user is already logged in
+  await checkAuthSession();
+
   const page = document.body.dataset.page;
   if (page === "home") await initHomePage();
   if (page === "library") initLibraryPage();
 });
+
+/* ---------------- auth ---------------- */
+
+async function checkAuthSession() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    isAdmin = true;
+    updateAdminUI();
+  }
+}
+
+async function handleAdminLogin() {
+  const email = document.getElementById("adminEmailInput").value.trim();
+  const password = document.getElementById("adminPasswordInput").value.trim();
+
+  if (!email || !password) {
+    return showToast("Email and password required!", "error");
+  }
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if (error) {
+    return showToast("Login failed: " + error.message, "error");
+  }
+
+  isAdmin = true;
+  closeAdminModal();
+  updateAdminUI();
+  await renderHome();
+  showToast("Logged in as admin!", "success");
+}
+
+async function handleAdminLogout() {
+  await supabaseClient.auth.signOut();
+  isAdmin = false;
+  updateAdminUI();
+  await renderHome();
+  showToast("Logged out", "info");
+}
+
+function updateAdminUI() {
+  const adminBtn = document.getElementById("adminToggleBtn");
+  if (!adminBtn) return;
+
+  if (isAdmin) {
+    adminBtn.textContent = "🔓 Logout";
+    adminBtn.onclick = handleAdminLogout;
+  } else {
+    adminBtn.textContent = "🔒 Admin";
+    adminBtn.onclick = openAdminModal;
+  }
+}
 
 /* ---------------- local helpers ---------------- */
 
@@ -114,37 +170,35 @@ function setupAdminModal() {
 
   const cancelBtn = document.getElementById("adminCancelBtn");
   const loginBtn = document.getElementById("adminLoginBtn");
-  const input = document.getElementById("adminPasswordInput");
+  const emailInput = document.getElementById("adminEmailInput");
+  const passwordInput = document.getElementById("adminPasswordInput");
   const backdrop = modal.querySelector("[data-close-admin-modal]");
 
   function close() {
     modal.classList.add("hidden");
-    if (input) input.value = "";
+    if (emailInput) emailInput.value = "";
+    if (passwordInput) passwordInput.value = "";
   }
 
   window.openAdminModal = function () {
+    if (isAdmin) {
+      handleAdminLogout();
+      return;
+    }
     modal.classList.remove("hidden");
-    setTimeout(() => input?.focus(), 50);
+    setTimeout(() => emailInput?.focus(), 50);
   };
 
   cancelBtn?.addEventListener("click", close);
   backdrop?.addEventListener("click", close);
 
-  loginBtn?.addEventListener("click", () => {
-    const password = input.value.trim();
-    if (password === ADMIN_PASSWORD) {
-      isAdmin = true;
-      close();
-      renderHome();
-      showToast("Admin mode activated", "info");
-    } else {
-      showToast("Wrong password!", "error");
-    }
-  });
+  loginBtn?.addEventListener("click", handleAdminLogin);
 
-  input?.addEventListener("keydown", (e) => {
+  passwordInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") loginBtn?.click();
   });
+
+  updateAdminUI();
 }
 
 function setupEditModal() {
@@ -398,17 +452,11 @@ async function initHomePage() {
 
   await renderHome();
 
-  adminBtn?.addEventListener("click", () => {
-    if (isAdmin) {
-      isAdmin = false;
-      renderHome();
-      showToast("Admin mode deactivated", "info");
-    } else {
-      openAdminModal();
-    }
-  });
+  adminBtn?.addEventListener("click", openAdminModal);
 
   createCategoryBtn?.addEventListener("click", async () => {
+    if (!isAdmin) return showToast("Please log in as admin first", "error");
+
     const name = document.getElementById("publicCategoryName").value.trim();
     const description = document.getElementById("publicCategoryDesc").value.trim();
 
@@ -433,6 +481,8 @@ async function initHomePage() {
   });
 
   addToolBtn?.addEventListener("click", async () => {
+    if (!isAdmin) return showToast("Please log in as admin first", "error");
+
     const name = publicToolName.value.trim();
     const link = sanitizeUrl(publicToolUrl.value.trim());
     const cat = document.getElementById("publicToolCategory").value;
@@ -492,6 +542,8 @@ async function initHomePage() {
       if (!data.publicCategories || !data.publicTools || !data.privateCategories || !data.privateTools) {
         return showToast("Invalid file. Please select a valid backup file.", "error");
       }
+
+      if (!isAdmin) return showToast("Please log in as admin first", "error");
 
       await supabaseClient.from("public_tools").delete().gte("id", 0);
       await supabaseClient.from("public_categories").delete().gte("id", 0);
