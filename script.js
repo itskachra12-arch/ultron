@@ -1,7 +1,7 @@
 const ADMIN_PASSWORD = "creative123";
 
 const SUPABASE_URL = "https://tgszbddlpxbnapkqyzoc.supabase.co";
-const SUPABASE_KEY = "sb_publishable_BbL3AlsiK4tmJpoaXZ8Png__59P2x0v";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnc3piZGRscHhibmFwa3F5em9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTExNjUsImV4cCI6MjA4OTAyNzE2NX0.NDz8CgSjsBmWP-oF3Jb-yRbTZE0JkjBsly98SVcFs-Q";
 
 const supabaseClient = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
