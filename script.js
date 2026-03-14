@@ -18,8 +18,6 @@ let isAdmin = false;
 let confirmCallback = null;
 let editingPublicToolId = null;
 
-/* ---------------- init ---------------- */
-
 document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
   setupSharedUI();
@@ -361,6 +359,7 @@ async function fetchPublicCategories() {
     .order("id", { ascending: true });
 
   if (error) {
+    console.error(error);
     showToast("Could not load public categories", "error");
     return [];
   }
@@ -376,6 +375,7 @@ async function fetchPublicTools() {
     .order("id", { ascending: true });
 
   if (error) {
+    console.error(error);
     showToast("Could not load public tools", "error");
     return [];
   }
@@ -410,7 +410,7 @@ async function initHomePage() {
 
   createCategoryBtn?.addEventListener("click", async () => {
     const name = document.getElementById("publicCategoryName").value.trim();
-    const desc = document.getElementById("publicCategoryDesc").value.trim();
+    const description = document.getElementById("publicCategoryDesc").value.trim();
 
     if (!name) return showToast("Name required!", "error");
 
@@ -419,16 +419,11 @@ async function initHomePage() {
 
     const { error } = await supabaseClient.from("public_categories").insert({
       name,
-      desc,
+      description,
       sort_order: highestSort + 1
     });
 
-    if (error) {
-      if (String(error.message).toLowerCase().includes("duplicate")) {
-        return showToast("Category already exists!", "error");
-      }
-      return showToast("Could not create category", "error");
-    }
+    if (error) return showToast("Could not create category", "error");
 
     document.getElementById("publicCategoryName").value = "";
     document.getElementById("publicCategoryDesc").value = "";
@@ -498,26 +493,21 @@ async function initHomePage() {
         return showToast("Invalid file. Please select a valid backup file.", "error");
       }
 
-      const { error: delToolsError } = await supabaseClient.from("public_tools").delete().gte("id", 0);
-      const { error: delCatsError } = await supabaseClient.from("public_categories").delete().gte("id", 0);
-
-      if (delToolsError || delCatsError) {
-        return showToast("Could not replace public data", "error");
-      }
+      await supabaseClient.from("public_tools").delete().gte("id", 0);
+      await supabaseClient.from("public_categories").delete().gte("id", 0);
 
       if (data.publicCategories.length) {
-        const { error } = await supabaseClient.from("public_categories").insert(
+        await supabaseClient.from("public_categories").insert(
           data.publicCategories.map((c, i) => ({
             name: c.name,
-            desc: c.desc || "",
+            description: c.description || c.desc || "",
             sort_order: c.sort_order ?? i + 1
           }))
         );
-        if (error) return showToast("Could not import categories", "error");
       }
 
       if (data.publicTools.length) {
-        const { error } = await supabaseClient.from("public_tools").insert(
+        await supabaseClient.from("public_tools").insert(
           data.publicTools.map((t, i) => ({
             name: t.name,
             link: t.link,
@@ -526,7 +516,6 @@ async function initHomePage() {
             sort_order: t.sort_order ?? i + 1
           }))
         );
-        if (error) return showToast("Could not import tools", "error");
       }
 
       setJSON(KEYS.privateCategories, data.privateCategories);
@@ -647,7 +636,7 @@ async function renderHome() {
 
     const tooltip = document.createElement("span");
     tooltip.className = "tooltip";
-    tooltip.textContent = cat.desc || "No description";
+    tooltip.textContent = cat.description || "No description";
     info.appendChild(tooltip);
     info.addEventListener("click", (e) => e.stopPropagation());
 
@@ -660,7 +649,6 @@ async function renderHome() {
       const upBtn = createMiniButton("↑", "Move up", async (e) => {
         e.stopPropagation();
         if (catIndex === 0) return;
-
         const prev = categories[catIndex - 1];
         await supabaseClient.from("public_categories").update({ sort_order: prev.sort_order }).eq("id", cat.id);
         await supabaseClient.from("public_categories").update({ sort_order: cat.sort_order }).eq("id", prev.id);
@@ -670,7 +658,6 @@ async function renderHome() {
       const downBtn = createMiniButton("↓", "Move down", async (e) => {
         e.stopPropagation();
         if (catIndex === categories.length - 1) return;
-
         const next = categories[catIndex + 1];
         await supabaseClient.from("public_categories").update({ sort_order: next.sort_order }).eq("id", cat.id);
         await supabaseClient.from("public_categories").update({ sort_order: cat.sort_order }).eq("id", next.id);
