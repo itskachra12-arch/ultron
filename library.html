@@ -10,7 +10,6 @@
   <header class="navbar">
     <div class="nav-inner container">
       <a href="index.html" class="logo">Creative Toolbox 🛠️</a>
-
       <nav class="nav-links">
         <a href="index.html" class="nav-link">🌍 Explore</a>
         <a href="library.html" class="nav-link active">📚 My Library</a>
@@ -25,13 +24,7 @@
       <p>Your personal space to save and organize any link from the internet</p>
 
       <div class="search-wrap">
-        <input
-          id="privateSearch"
-          class="search-input"
-          type="text"
-          placeholder="Search your saved links... (Press /)"
-          autocomplete="off"
-        />
+        <input id="privateSearch" class="search-input" type="text" placeholder="Search your saved links... (Press /)" autocomplete="off" />
       </div>
 
       <div id="libraryStats" class="stats-line"></div>
@@ -108,12 +101,18 @@
       <div id="privateFavoritesGrid" class="card-grid"></div>
     </section>
 
-    <section class="section">
+    <section id="privateSearchSection" class="section hidden">
+      <div class="section-head">
+        <h2 id="privateSearchTitle">Search Results</h2>
+      </div>
+      <div id="privateSearchResults" class="card-grid"></div>
+      <div id="privateNoResults" class="empty-state hidden"></div>
+    </section>
+
+    <section id="privateCategoriesSection" class="section">
       <div class="section-head">
         <h2>My Categories</h2>
       </div>
-
-      <div id="privateNoResults" class="empty-state hidden"></div>
       <div id="privateCategoriesContainer"></div>
     </section>
 
@@ -141,7 +140,6 @@
   </footer>
 
   <button id="scrollTopBtn" class="scroll-top-btn" aria-label="Scroll to top">↑</button>
-
   <div id="toastContainer" class="toast-container"></div>
 
   <div id="confirmModal" class="modal hidden">
