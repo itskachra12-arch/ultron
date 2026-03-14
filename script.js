@@ -20,8 +20,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
   setupSharedUI();
 
-  // Check if user is already logged in
-  await checkAuthSession();
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    isAdmin = !!session;
+    updateAdminUI();
+
+    if (document.body.dataset.page === "home") {
+      setTimeout(async () => {
+        await renderHome();
+      }, 0);
+    }
+  });
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  isAdmin = !!session;
+  updateAdminUI();
 
   const page = document.body.dataset.page;
   if (page === "home") await initHomePage();
@@ -29,14 +41,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 /* ---------------- auth ---------------- */
-
-async function checkAuthSession() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) {
-    isAdmin = true;
-    updateAdminUI();
-  }
-}
 
 async function handleAdminLogin() {
   const email = document.getElementById("adminEmailInput").value.trim();
@@ -46,7 +50,7 @@ async function handleAdminLogin() {
     return showToast("Email and password required!", "error");
   }
 
-  const { data, error } = await supabaseClient.auth.signInWithPassword({
+  const { error } = await supabaseClient.auth.signInWithPassword({
     email,
     password
   });
@@ -63,7 +67,9 @@ async function handleAdminLogin() {
 }
 
 async function handleAdminLogout() {
-  await supabaseClient.auth.signOut();
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) return showToast("Logout failed", "error");
+
   isAdmin = false;
   updateAdminUI();
   await renderHome();
@@ -72,15 +78,25 @@ async function handleAdminLogout() {
 
 function updateAdminUI() {
   const adminBtn = document.getElementById("adminToggleBtn");
-  if (!adminBtn) return;
+  const adminPanel = document.getElementById("adminPanelSection");
 
-  if (isAdmin) {
-    adminBtn.textContent = "🔓 Logout";
-    adminBtn.onclick = handleAdminLogout;
-  } else {
-    adminBtn.textContent = "🔒 Admin";
-    adminBtn.onclick = openAdminModal;
+  if (adminBtn) {
+    adminBtn.textContent = isAdmin ? "🔓 Logout" : "🔒 Admin";
   }
+
+  if (adminPanel) {
+    adminPanel.classList.toggle("hidden", !isAdmin);
+  }
+}
+
+function closeAdminModal() {
+  const modal = document.getElementById("adminModal");
+  const emailInput = document.getElementById("adminEmailInput");
+  const passwordInput = document.getElementById("adminPasswordInput");
+
+  if (modal) modal.classList.add("hidden");
+  if (emailInput) emailInput.value = "";
+  if (passwordInput) passwordInput.value = "";
 }
 
 /* ---------------- local helpers ---------------- */
@@ -173,24 +189,15 @@ function setupAdminModal() {
   const emailInput = document.getElementById("adminEmailInput");
   const passwordInput = document.getElementById("adminPasswordInput");
   const backdrop = modal.querySelector("[data-close-admin-modal]");
+  const adminBtn = document.getElementById("adminToggleBtn");
 
-  function close() {
-    modal.classList.add("hidden");
-    if (emailInput) emailInput.value = "";
-    if (passwordInput) passwordInput.value = "";
-  }
-
-  window.openAdminModal = function () {
-    if (isAdmin) {
-      handleAdminLogout();
-      return;
-    }
+  function open() {
     modal.classList.remove("hidden");
     setTimeout(() => emailInput?.focus(), 50);
-  };
+  }
 
-  cancelBtn?.addEventListener("click", close);
-  backdrop?.addEventListener("click", close);
+  cancelBtn?.addEventListener("click", closeAdminModal);
+  backdrop?.addEventListener("click", closeAdminModal);
 
   loginBtn?.addEventListener("click", handleAdminLogin);
 
@@ -198,7 +205,13 @@ function setupAdminModal() {
     if (e.key === "Enter") loginBtn?.click();
   });
 
-  updateAdminUI();
+  adminBtn?.addEventListener("click", () => {
+    if (isAdmin) {
+      handleAdminLogout();
+    } else {
+      open();
+    }
+  });
 }
 
 function setupEditModal() {
@@ -440,7 +453,6 @@ async function fetchPublicTools() {
 /* ---------------- home page ---------------- */
 
 async function initHomePage() {
-  const adminBtn = document.getElementById("adminToggleBtn");
   const createCategoryBtn = document.getElementById("createPublicCategoryBtn");
   const addToolBtn = document.getElementById("addPublicToolBtn");
   const exportAllBtn = document.getElementById("exportAllBtn");
@@ -451,8 +463,6 @@ async function initHomePage() {
   const publicToolName = document.getElementById("publicToolName");
 
   await renderHome();
-
-  adminBtn?.addEventListener("click", openAdminModal);
 
   createCategoryBtn?.addEventListener("click", async () => {
     if (!isAdmin) return showToast("Please log in as admin first", "error");
