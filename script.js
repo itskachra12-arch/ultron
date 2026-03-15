@@ -707,6 +707,9 @@ async function replaceCloudLibrary(data) {
 
 async function importGuestLibraryToAccount() {
   if (!currentUser) return showToast("Please log in first.", "error");
+  if (isImportingGuestLibrary) return;
+
+  const importBtn = document.getElementById("importGuestDataBtn");
 
   const guestData = {
     privateCategories: getJSON(KEYS.privateCategories),
@@ -717,17 +720,37 @@ async function importGuestLibraryToAccount() {
     return showToast("No guest library found to import.", "error");
   }
 
-  const error = await replaceCloudLibrary(guestData);
-  if (error) {
-    console.error(error);
-    return showToast("Could not import guest library.", "error");
+  try {
+    isImportingGuestLibrary = true;
+
+    if (importBtn) {
+      importBtn.disabled = true;
+      importBtn.textContent = "Importing...";
+    }
+
+    const error = await replaceCloudLibrary(guestData);
+    if (error) {
+      console.error(error);
+      showToast("Could not import guest library.", "error");
+      return;
+    }
+
+    await renderLibrary();
+
+    if (importBtn) {
+      importBtn.classList.add("hidden");
+    }
+
+    showToast("Guest library imported into your account!", "success");
+  } finally {
+    isImportingGuestLibrary = false;
+
+    if (importBtn && !importBtn.classList.contains("hidden")) {
+      importBtn.disabled = false;
+      importBtn.textContent = "Import Guest Library";
+    }
   }
-
-  await renderLibrary();
-  document.getElementById("importGuestDataBtn")?.classList.add("hidden");
-  showToast("Guest library imported into your account!", "success");
 }
-
 /* ---------------- home page ---------------- */
 
 async function initHomePage() {
