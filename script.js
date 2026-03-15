@@ -1,5 +1,5 @@
 const SUPABASE_URL = "https://tgszbddlpxbnapkqyzoc.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnc3piZGRscHhibmFwa3F5em9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTExNjUsImV4cCI6MjA4OTAyNzE2NX0.NDz8CgSjsBmWP-oF3Jb-yRbTZE0JkjBsly98SVcFs-Q";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnc3piZGRscHhibmFwa3F5em9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTExNjUsImV4cCI6MjA4OTAyNzE2NX0.NDz8CgSjsBmWP-oF3Jb-yRbTZE0JkjBsly98SVcFs-Q";
 const ADMIN_USER_ID = "2a7c9c98-580e-4329-8739-0459bd2dc878";
 
 const supabaseClient = window.supabase
@@ -16,8 +16,6 @@ let isAdmin = false;
 let confirmCallback = null;
 let editingPublicToolId = null;
 let currentUser = null;
-
-/* ---------------- boot ---------------- */
 
 document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
@@ -145,6 +143,7 @@ async function handleUserLogin() {
 
   await refreshLibraryAuthUI();
   await renderLibrary();
+  closeModalById("accountModal");
 
   if (guestHasData && currentUser) {
     const importBtn = document.getElementById("importGuestDataBtn");
@@ -163,7 +162,8 @@ async function handleUserLogout() {
   isAdmin = false;
 
   await refreshLibraryAuthUI();
-  renderLibrary();
+  await renderLibrary();
+  closeModalById("accountModal");
   showToast("Logged out. Back to guest mode.", "info");
 }
 
@@ -230,6 +230,8 @@ function setupSharedUI() {
   setupKeyboardShortcut();
   setupAdminModal();
   setupEditModal();
+  setupCustomModals();
+  setupPasswordToggles();
 }
 
 function setupToasts() {
@@ -360,6 +362,51 @@ function setupEditModal() {
   });
 }
 
+function setupCustomModals() {
+  const openAccountModalBtn = document.getElementById("openAccountModalBtn");
+  const closeAccountModalBtn = document.getElementById("closeAccountModalBtn");
+  const accountBackdrop = document.querySelector("[data-close-account-modal]");
+
+  const openQuickAddModalBtn = document.getElementById("openQuickAddModalBtn");
+  const closeQuickAddModalBtn = document.getElementById("closeQuickAddModalBtn");
+  const quickAddBackdrop = document.querySelector("[data-close-quick-add-modal]");
+
+  openAccountModalBtn?.addEventListener("click", () => openModalById("accountModal"));
+  closeAccountModalBtn?.addEventListener("click", () => closeModalById("accountModal"));
+  accountBackdrop?.addEventListener("click", () => closeModalById("accountModal"));
+
+  openQuickAddModalBtn?.addEventListener("click", () => openModalById("quickAddModal"));
+  closeQuickAddModalBtn?.addEventListener("click", () => closeModalById("quickAddModal"));
+  quickAddBackdrop?.addEventListener("click", () => closeModalById("quickAddModal"));
+}
+
+function openModalById(id) {
+  const modal = document.getElementById(id);
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeModalById(id) {
+  const modal = document.getElementById(id);
+  if (modal) modal.classList.add("hidden");
+}
+
+function setupPasswordToggles() {
+  const signupBtn = document.getElementById("toggleSignupPasswordBtn");
+  const loginBtn = document.getElementById("toggleLoginPasswordBtn");
+
+  signupBtn?.addEventListener("click", () => {
+    const input = document.getElementById("userSignupPassword");
+    if (!input) return;
+    input.type = input.type === "password" ? "text" : "password";
+  });
+
+  loginBtn?.addEventListener("click", () => {
+    const input = document.getElementById("userLoginPassword");
+    if (!input) return;
+    input.type = input.type === "password" ? "text" : "password";
+  });
+}
+
 function setupScrollTop() {
   const btn = document.getElementById("scrollTopBtn");
   if (!btn) return;
@@ -383,6 +430,11 @@ function setupKeyboardShortcut() {
       e.preventDefault();
       const search = document.getElementById("publicSearch") || document.getElementById("privateSearch");
       search?.focus();
+    }
+
+    if (e.key === "Escape") {
+      closeModalById("accountModal");
+      closeModalById("quickAddModal");
     }
   });
 }
@@ -986,7 +1038,7 @@ async function renderHome() {
   });
 }
 
-/* ---------------- library auth ui ---------------- */
+/* ---------------- library page ---------------- */
 
 async function initLibraryPage() {
   const createCategoryBtn = document.getElementById("createPrivateCategoryBtn");
@@ -1034,6 +1086,7 @@ async function initLibraryPage() {
 
     document.getElementById("privateCategoryName").value = "";
     await renderLibrary();
+    closeModalById("quickAddModal");
     showToast("Category created!", "success");
   });
 
@@ -1061,6 +1114,7 @@ async function initLibraryPage() {
     document.getElementById("privateToolFav").checked = false;
 
     await renderLibrary();
+    closeModalById("quickAddModal");
     showToast("Tool added!", "success");
   });
 
@@ -1284,13 +1338,11 @@ async function renderLibrary() {
         if (currentUser) {
           const error = await deleteCloudCategory(cat.name);
           if (error) return showToast("Could not delete category", "error");
+          await renderLibrary();
+          showToast("Category deleted!", "success");
         } else {
           deletePrivateCategory(cat.name);
-          return;
         }
-
-        await renderLibrary();
-        showToast("Category deleted!", "success");
       });
     });
 
