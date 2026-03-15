@@ -31,33 +31,40 @@
       <div id="libraryStats" class="stats-line"></div>
     </section>
 
-    <section id="syncBanner" class="panel sync-banner">
-      <div class="sync-head">
+    <section class="panel">
+      <div class="panel-header">
         <div>
-          <h2>Your links are saved in this browser only</h2>
-          <p class="muted">Generate or enter a sync code. For now this works using localStorage only.</p>
+          <h2>Account & Sync</h2>
+          <p id="libraryModeText" class="panel-note">You are using guest mode. Your library is saved only on this device.</p>
         </div>
-        <button id="toggleSyncBannerBtn" class="icon-btn">—</button>
       </div>
 
-      <div id="syncBannerBody" class="sync-body">
-        <div class="inline-actions wrap">
-          <button id="generateSyncBtn" class="btn btn-primary">🔑 Generate Sync Code</button>
-          <button id="showEnterCodeBtn" class="btn">🔑 Enter Sync Code</button>
-          <button class="btn btn-disabled" disabled>Sign in with Google (Coming Soon)</button>
-        </div>
-
-        <div id="syncCodeBox" class="sync-code-box hidden">
-          <div class="sync-code-row">
-            <span id="syncCodeText" class="sync-code-text"></span>
-            <button id="copySyncCodeBtn" class="btn">Copy</button>
+      <div id="guestAuthWrap" class="admin-grid">
+        <div class="subpanel">
+          <h3>Create Account</h3>
+          <div class="form-grid">
+            <input id="userSignupEmail" type="email" class="input" placeholder="Email address" />
+            <input id="userSignupPassword" type="password" class="input" placeholder="Password" />
+            <button id="userSignupBtn" class="btn btn-primary">Sign Up</button>
           </div>
-          <p class="muted">Save this code! Use it on any device to access your library later.</p>
         </div>
 
-        <div id="enterCodeWrap" class="inline-actions wrap hidden">
-          <input id="syncCodeInput" type="text" class="input" placeholder="Enter sync code..." />
-          <button id="loadSyncCodeBtn" class="btn btn-primary">Load Library</button>
+        <div class="subpanel">
+          <h3>Log In</h3>
+          <div class="form-grid">
+            <input id="userLoginEmail" type="email" class="input" placeholder="Email address" />
+            <input id="userLoginPassword" type="password" class="input" placeholder="Password" />
+            <button id="userLoginBtn" class="btn btn-primary">Log In</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="accountWrap" class="subpanel hidden">
+        <h3>Account Active</h3>
+        <p id="accountEmailText" class="muted">Logged in</p>
+        <div class="inline-actions wrap">
+          <button id="importGuestDataBtn" class="btn">Import Guest Library</button>
+          <button id="userLogoutBtn" class="btn btn-primary">Log Out</button>
         </div>
       </div>
     </section>
