@@ -179,8 +179,7 @@ button, input, select, textarea { font: inherit; }
 }
 
 .panel-header,
-.section-head,
-.sync-head {
+.section-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -189,8 +188,7 @@ button, input, select, textarea { font: inherit; }
 }
 
 .panel-header h2,
-.section-head h2,
-.sync-head h2 {
+.section-head h2 {
   margin: 0 0 4px;
   font-size: 1.25rem;
 }
@@ -268,6 +266,25 @@ button, input, select, textarea { font: inherit; }
 }
 
 .wrap { flex-wrap: wrap; }
+
+.library-top-actions {
+  position: relative;
+  margin-top: 18px;
+  min-height: 48px;
+}
+
+.library-top-actions-center {
+  display: flex;
+  justify-content: center;
+}
+
+.library-top-actions-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  justify-content: flex-end;
+}
 
 .card-grid {
   display: grid;
@@ -586,19 +603,24 @@ button, input, select, textarea { font: inherit; }
 .modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.64);
+  background: rgba(0,0,0,0.62);
+  backdrop-filter: blur(8px);
 }
 
 .modal-card {
   position: relative;
   z-index: 1;
   width: min(440px, calc(100% - 24px));
-  margin: 14vh auto 0;
+  margin: 10vh auto 0;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 20px;
   box-shadow: var(--shadow);
+}
+
+.modal-card-wide {
+  width: min(760px, calc(100% - 24px));
 }
 
 .modal-card h3 { margin: 0 0 8px; }
@@ -611,6 +633,33 @@ button, input, select, textarea { font: inherit; }
 }
 
 .modal-actions.left { justify-content: flex-start; }
+
+.password-wrap {
+  position: relative;
+}
+
+.password-input {
+  padding-right: 54px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  min-width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.password-toggle-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
 
 .scroll-top-btn {
   position: fixed;
@@ -630,27 +679,6 @@ button, input, select, textarea { font: inherit; }
 }
 
 .scroll-top-btn.show { display: grid; }
-
-.sync-code-box {
-  margin-top: 14px;
-  padding: 14px;
-  border-radius: 14px;
-  border: 1px dashed var(--border-2);
-  background: rgba(255,255,255,0.01);
-}
-
-.sync-code-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.sync-code-text {
-  color: var(--accent);
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
 
 @media (min-width: 860px) {
   .admin-grid,
@@ -690,9 +718,22 @@ button, input, select, textarea { font: inherit; }
   }
 
   .panel-header,
-  .section-head,
-  .sync-head {
+  .section-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .library-top-actions {
+    display: grid;
+    gap: 10px;
+  }
+
+  .library-top-actions-right {
+    position: static;
+    justify-content: center;
+  }
+
+  .library-top-actions-center {
+    justify-content: center;
   }
 }
