@@ -114,9 +114,9 @@
         <div class="subpanel">
           <h3>Create Account</h3>
           <div class="form-grid">
-            <input id="userSignupEmail" type="email" class="input" placeholder="Email address" />
+            <input id="userSignupEmail" type="email" class="input" placeholder="Email address" autocomplete="email" />
             <div class="password-wrap">
-              <input id="userSignupPassword" type="password" class="input password-input" placeholder="Password" />
+              <input id="userSignupPassword" type="password" class="input password-input" placeholder="Password" autocomplete="new-password" />
               <button id="toggleSignupPasswordBtn" type="button" class="password-toggle-btn">👁</button>
             </div>
             <button id="userSignupBtn" class="btn btn-primary">Sign Up</button>
@@ -126,9 +126,9 @@
         <div class="subpanel">
           <h3>Log In</h3>
           <div class="form-grid">
-            <input id="userLoginEmail" type="email" class="input" placeholder="Email address" />
+            <input id="userLoginEmail" type="email" class="input" placeholder="Email address" autocomplete="email" />
             <div class="password-wrap">
-              <input id="userLoginPassword" type="password" class="input password-input" placeholder="Password" />
+              <input id="userLoginPassword" type="password" class="input password-input" placeholder="Password" autocomplete="current-password" />
               <button id="toggleLoginPasswordBtn" type="button" class="password-toggle-btn">👁</button>
             </div>
             <button id="userLoginBtn" class="btn btn-primary">Log In</button>
@@ -161,8 +161,8 @@
         <div class="subpanel">
           <h3>Add Link</h3>
           <div class="form-grid">
-            <input id="privateToolName" type="text" class="input" placeholder="Link name" />
-            <input id="privateToolUrl" type="url" class="input" placeholder="https://example.com" />
+            <input id="privateToolName" type="text" class="input" placeholder="Link name" autocomplete="off" />
+            <input id="privateToolUrl" type="url" class="input" placeholder="https://example.com" autocomplete="off" />
             <select id="privateToolCategory" class="input select"></select>
             <label class="check-row">
               <input id="privateToolFav" type="checkbox" />
@@ -175,7 +175,7 @@
         <div class="subpanel">
           <h3>Create Category</h3>
           <div class="form-grid">
-            <input id="privateCategoryName" type="text" class="input" placeholder="Category name" />
+            <input id="privateCategoryName" type="text" class="input" placeholder="Category name" autocomplete="off" />
             <button id="createPrivateCategoryBtn" class="btn btn-primary">Create Category</button>
           </div>
         </div>
@@ -194,14 +194,14 @@
       <p>Got a suggestion, tool recommendation, feedback, or issue? Send it here.</p>
       <p class="muted">You can also email directly at <a href="mailto:itskachra12@gmail.com">itskachra12@gmail.com</a></p>
       <div class="form-grid">
-        <input id="feedbackName" type="text" class="input" placeholder="Your name (optional)" />
-        <input id="feedbackEmail" type="email" class="input" placeholder="Your email (optional)" />
+        <input id="feedbackName" type="text" class="input" placeholder="Your name (optional)" autocomplete="name" />
+        <input id="feedbackEmail" type="email" class="input" placeholder="Your email (optional)" autocomplete="email" />
         <select id="feedbackType" class="input select">
           <option value="Suggest a Tool">Suggest a Tool</option>
           <option value="Send Feedback">Send Feedback</option>
           <option value="Report an Issue">Report an Issue</option>
         </select>
-        <textarea id="feedbackMessage" class="input textarea" placeholder="Write your message..." rows="5"></textarea>
+        <textarea id="feedbackMessage" class="input textarea" placeholder="Write your message..." rows="5" autocomplete="off"></textarea>
         <div class="modal-actions left">
           <button id="feedbackCancelBtn" class="btn">Cancel</button>
           <button id="feedbackSubmitBtn" class="btn btn-primary">Send</button>
