@@ -28,78 +28,16 @@
         <input id="privateSearch" class="search-input" type="text" placeholder="Search your saved links... (Press /)" autocomplete="off" />
       </div>
 
+      <div class="library-top-actions">
+        <div class="library-top-actions-center">
+          <button id="openQuickAddModalBtn" class="btn">➕ Quick Add</button>
+        </div>
+        <div class="library-top-actions-right">
+          <button id="openAccountModalBtn" class="btn btn-primary">👤 Account & Sync</button>
+        </div>
+      </div>
+
       <div id="libraryStats" class="stats-line"></div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Account & Sync</h2>
-          <p id="libraryModeText" class="panel-note">You are using guest mode. Your library is saved only on this device.</p>
-        </div>
-      </div>
-
-      <div id="guestAuthWrap" class="admin-grid">
-        <div class="subpanel">
-          <h3>Create Account</h3>
-          <div class="form-grid">
-            <input id="userSignupEmail" type="email" class="input" placeholder="Email address" />
-            <input id="userSignupPassword" type="password" class="input" placeholder="Password" />
-            <button id="userSignupBtn" class="btn btn-primary">Sign Up</button>
-          </div>
-        </div>
-
-        <div class="subpanel">
-          <h3>Log In</h3>
-          <div class="form-grid">
-            <input id="userLoginEmail" type="email" class="input" placeholder="Email address" />
-            <input id="userLoginPassword" type="password" class="input" placeholder="Password" />
-            <button id="userLoginBtn" class="btn btn-primary">Log In</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="accountWrap" class="subpanel hidden">
-        <h3>Account Active</h3>
-        <p id="accountEmailText" class="muted">Logged in</p>
-        <div class="inline-actions wrap">
-          <button id="importGuestDataBtn" class="btn">Import Guest Library</button>
-          <button id="userLogoutBtn" class="btn btn-primary">Log Out</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel quick-add-panel">
-      <div class="panel-header">
-        <div>
-          <h2>Quick Add</h2>
-          <p class="panel-note">Save links fast and stay organized</p>
-        </div>
-      </div>
-
-      <div class="quick-add-grid">
-        <div class="subpanel">
-          <h3>Add Link</h3>
-          <div class="form-grid">
-            <input id="privateToolName" type="text" class="input" placeholder="Link name" />
-            <input id="privateToolUrl" type="url" class="input" placeholder="https://example.com" />
-            <select id="privateToolCategory" class="input select"></select>
-            <label class="check-row">
-              <input id="privateToolFav" type="checkbox" />
-              <span>Favorite</span>
-            </label>
-            <button id="addPrivateToolBtn" class="btn btn-primary">Add Link</button>
-          </div>
-        </div>
-
-        <div class="subpanel">
-          <h3>Create Category</h3>
-          <div class="form-grid">
-            <input id="privateCategoryName" type="text" class="input" placeholder="Category name" />
-            <button id="createPrivateCategoryBtn" class="btn btn-primary">Create Category</button>
-          </div>
-        </div>
-      </div>
     </section>
 
     <section id="privateFavoritesSection" class="section hidden">
@@ -162,6 +100,89 @@
       <div class="modal-actions">
         <button id="confirmCancel" class="btn">Cancel</button>
         <button id="confirmDelete" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="accountModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-account-modal></div>
+    <div class="modal-card modal-card-wide">
+      <h3>Account & Sync</h3>
+      <p id="libraryModeText">You are using guest mode. Your library is saved only on this device.</p>
+
+      <div id="guestAuthWrap" class="admin-grid">
+        <div class="subpanel">
+          <h3>Create Account</h3>
+          <div class="form-grid">
+            <input id="userSignupEmail" type="email" class="input" placeholder="Email address" />
+            <div class="password-wrap">
+              <input id="userSignupPassword" type="password" class="input password-input" placeholder="Password" />
+              <button id="toggleSignupPasswordBtn" type="button" class="password-toggle-btn">👁</button>
+            </div>
+            <button id="userSignupBtn" class="btn btn-primary">Sign Up</button>
+          </div>
+        </div>
+
+        <div class="subpanel">
+          <h3>Log In</h3>
+          <div class="form-grid">
+            <input id="userLoginEmail" type="email" class="input" placeholder="Email address" />
+            <div class="password-wrap">
+              <input id="userLoginPassword" type="password" class="input password-input" placeholder="Password" />
+              <button id="toggleLoginPasswordBtn" type="button" class="password-toggle-btn">👁</button>
+            </div>
+            <button id="userLoginBtn" class="btn btn-primary">Log In</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="accountWrap" class="subpanel hidden">
+        <h3>Account Active</h3>
+        <p id="accountEmailText" class="muted">Logged in</p>
+        <div class="inline-actions wrap">
+          <button id="importGuestDataBtn" class="btn">Import Guest Library</button>
+          <button id="userLogoutBtn" class="btn btn-primary">Log Out</button>
+        </div>
+      </div>
+
+      <div class="modal-actions left">
+        <button id="closeAccountModalBtn" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="quickAddModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-quick-add-modal></div>
+    <div class="modal-card modal-card-wide">
+      <h3>Quick Add</h3>
+      <p>Add links and create categories without cluttering the page.</p>
+
+      <div class="quick-add-grid">
+        <div class="subpanel">
+          <h3>Add Link</h3>
+          <div class="form-grid">
+            <input id="privateToolName" type="text" class="input" placeholder="Link name" />
+            <input id="privateToolUrl" type="url" class="input" placeholder="https://example.com" />
+            <select id="privateToolCategory" class="input select"></select>
+            <label class="check-row">
+              <input id="privateToolFav" type="checkbox" />
+              <span>Favorite</span>
+            </label>
+            <button id="addPrivateToolBtn" class="btn btn-primary">Add Link</button>
+          </div>
+        </div>
+
+        <div class="subpanel">
+          <h3>Create Category</h3>
+          <div class="form-grid">
+            <input id="privateCategoryName" type="text" class="input" placeholder="Category name" />
+            <button id="createPrivateCategoryBtn" class="btn btn-primary">Create Category</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions left">
+        <button id="closeQuickAddModalBtn" class="btn">Close</button>
       </div>
     </div>
   </div>
