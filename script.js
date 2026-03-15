@@ -16,6 +16,7 @@ let isAdmin = false;
 let confirmCallback = null;
 let editingPublicToolId = null;
 let currentUser = null;
+let isImportingGuestLibrary = false;
 
 document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
