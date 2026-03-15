@@ -1,5 +1,6 @@
 const SUPABASE_URL = "https://tgszbddlpxbnapkqyzoc.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnc3piZGRscHhibmFwa3F5em9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NTExNjUsImV4cCI6MjA4OTAyNzE2NX0.NDz8CgSjsBmWP-oF3Jb-yRbTZE0JkjBsly98SVcFs-Q";
+const ADMIN_USER_ID = "2a7c9c98-580e-4329-8739-0459bd2dc878";
 
 const supabaseClient = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -8,36 +9,52 @@ const supabaseClient = window.supabase
 const KEYS = {
   privateCategories: "privateCategories",
   privateTools: "privateTools",
-  libraryCollapsed: "libraryCollapsedCategories",
-  syncBannerCollapsed: "syncBannerCollapsed"
+  libraryCollapsed: "libraryCollapsedCategories"
 };
 
 let isAdmin = false;
 let confirmCallback = null;
 let editingPublicToolId = null;
+let currentUser = null;
+
+/* ---------------- boot ---------------- */
 
 document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
   setupSharedUI();
 
-  supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    isAdmin = !!session;
-    updateAdminUI();
+  if (supabaseClient) {
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      currentUser = session?.user || null;
+      isAdmin = currentUser?.id === ADMIN_USER_ID;
+      updateAdminUI();
 
-    if (document.body.dataset.page === "home") {
-      setTimeout(async () => {
-        await renderHome();
-      }, 0);
-    }
-  });
+      const page = document.body.dataset.page;
 
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  isAdmin = !!session;
+      if (page === "home") {
+        setTimeout(async () => {
+          await renderHome();
+        }, 0);
+      }
+
+      if (page === "library") {
+        setTimeout(async () => {
+          await refreshLibraryAuthUI();
+          await renderLibrary();
+        }, 0);
+      }
+    });
+
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    currentUser = session?.user || null;
+    isAdmin = currentUser?.id === ADMIN_USER_ID;
+  }
+
   updateAdminUI();
 
   const page = document.body.dataset.page;
   if (page === "home") await initHomePage();
-  if (page === "library") initLibraryPage();
+  if (page === "library") await initLibraryPage();
 
   setupFeedbackModal();
 });
@@ -45,22 +62,26 @@ document.addEventListener("DOMContentLoaded", async () => {
 /* ---------------- auth ---------------- */
 
 async function handleAdminLogin() {
-  const email = document.getElementById("adminEmailInput").value.trim();
-  const password = document.getElementById("adminPasswordInput").value.trim();
+  const email = document.getElementById("adminEmailInput")?.value.trim() || "";
+  const password = document.getElementById("adminPasswordInput")?.value.trim() || "";
 
   if (!email || !password) {
     return showToast("Email and password required!", "error");
   }
 
-  const { error } = await supabaseClient.auth.signInWithPassword({
-    email,
-    password
-  });
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
   if (error) {
     return showToast("Login failed: " + error.message, "error");
   }
 
+  const user = data?.user;
+  if (!user || user.id !== ADMIN_USER_ID) {
+    await supabaseClient.auth.signOut();
+    return showToast("This account is not authorized as admin.", "error");
+  }
+
+  currentUser = user;
   isAdmin = true;
   closeAdminModal();
   updateAdminUI();
@@ -72,10 +93,78 @@ async function handleAdminLogout() {
   const { error } = await supabaseClient.auth.signOut();
   if (error) return showToast("Logout failed", "error");
 
+  currentUser = null;
   isAdmin = false;
   updateAdminUI();
   await renderHome();
   showToast("Logged out", "info");
+}
+
+async function handleUserSignup() {
+  const email = document.getElementById("userSignupEmail")?.value.trim() || "";
+  const password = document.getElementById("userSignupPassword")?.value.trim() || "";
+
+  if (!email || !password) {
+    return showToast("Email and password required!", "error");
+  }
+
+  if (password.length < 6) {
+    return showToast("Password should be at least 6 characters.", "error");
+  }
+
+  const { error } = await supabaseClient.auth.signUp({ email, password });
+
+  if (error) {
+    return showToast(error.message, "error");
+  }
+
+  document.getElementById("userSignupEmail").value = "";
+  document.getElementById("userSignupPassword").value = "";
+
+  showToast("Signup successful! Please confirm your email, then log in.", "success");
+}
+
+async function handleUserLogin() {
+  const email = document.getElementById("userLoginEmail")?.value.trim() || "";
+  const password = document.getElementById("userLoginPassword")?.value.trim() || "";
+
+  if (!email || !password) {
+    return showToast("Email and password required!", "error");
+  }
+
+  const guestHasData = hasGuestLibraryData();
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    return showToast("Login failed: " + error.message, "error");
+  }
+
+  currentUser = data?.user || null;
+  isAdmin = currentUser?.id === ADMIN_USER_ID;
+
+  await refreshLibraryAuthUI();
+  await renderLibrary();
+
+  if (guestHasData && currentUser) {
+    const importBtn = document.getElementById("importGuestDataBtn");
+    if (importBtn) importBtn.classList.remove("hidden");
+    showToast("Logged in! You can import your guest library into this account.", "success");
+  } else {
+    showToast("Logged in!", "success");
+  }
+}
+
+async function handleUserLogout() {
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) return showToast("Logout failed", "error");
+
+  currentUser = null;
+  isAdmin = false;
+
+  await refreshLibraryAuthUI();
+  renderLibrary();
+  showToast("Logged out. Back to guest mode.", "info");
 }
 
 function updateAdminUI() {
@@ -124,6 +213,12 @@ function seedPrivateDefaults() {
   if (!localStorage.getItem(KEYS.privateCategories)) setJSON(KEYS.privateCategories, []);
   if (!localStorage.getItem(KEYS.privateTools)) setJSON(KEYS.privateTools, []);
   if (!localStorage.getItem(KEYS.libraryCollapsed)) setJSON(KEYS.libraryCollapsed, {});
+}
+
+function hasGuestLibraryData() {
+  const categories = getJSON(KEYS.privateCategories, []);
+  const tools = getJSON(KEYS.privateTools, []);
+  return categories.length > 0 || tools.length > 0;
 }
 
 /* ---------------- shared ui ---------------- */
@@ -200,7 +295,6 @@ function setupAdminModal() {
 
   cancelBtn?.addEventListener("click", closeAdminModal);
   backdrop?.addEventListener("click", closeAdminModal);
-
   loginBtn?.addEventListener("click", handleAdminLogin);
 
   passwordInput?.addEventListener("keydown", (e) => {
@@ -208,11 +302,8 @@ function setupAdminModal() {
   });
 
   adminBtn?.addEventListener("click", () => {
-    if (isAdmin) {
-      handleAdminLogout();
-    } else {
-      open();
-    }
+    if (isAdmin) handleAdminLogout();
+    else open();
   });
 }
 
@@ -405,8 +496,8 @@ function moveLocalCategory(key, index, direction) {
 }
 
 function scoreTool(tool, term) {
-  const name = tool.name.toLowerCase();
-  const cat = tool.cat.toLowerCase();
+  const name = (tool.name || "").toLowerCase();
+  const cat = (tool.cat || "").toLowerCase();
 
   if (!term) return 0;
   if (name === term) return 100;
@@ -450,6 +541,138 @@ async function fetchPublicTools() {
   }
 
   return data || [];
+}
+
+/* ---------------- supabase private data ---------------- */
+
+async function fetchCloudCategories() {
+  if (!currentUser) return [];
+  const { data, error } = await supabaseClient
+    .from("private_categories")
+    .select("*")
+    .eq("user_id", currentUser.id)
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    console.error(error);
+    showToast("Could not load cloud categories", "error");
+    return [];
+  }
+
+  return data || [];
+}
+
+async function fetchCloudTools() {
+  if (!currentUser) return [];
+  const { data, error } = await supabaseClient
+    .from("private_tools")
+    .select("*")
+    .eq("user_id", currentUser.id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error(error);
+    showToast("Could not load cloud tools", "error");
+    return [];
+  }
+
+  return data || [];
+}
+
+async function createCloudCategory(name) {
+  const { error } = await supabaseClient.from("private_categories").insert({
+    user_id: currentUser.id,
+    name
+  });
+  return error;
+}
+
+async function createCloudTool(tool) {
+  const { error } = await supabaseClient.from("private_tools").insert({
+    id: generateId(),
+    user_id: currentUser.id,
+    name: tool.name,
+    link: tool.link,
+    cat: tool.cat,
+    fav: !!tool.fav
+  });
+  return error;
+}
+
+async function deleteCloudCategory(categoryName) {
+  await supabaseClient.from("private_tools").delete().eq("user_id", currentUser.id).eq("cat", categoryName);
+  const { error } = await supabaseClient.from("private_categories").delete().eq("user_id", currentUser.id).eq("name", categoryName);
+  return error;
+}
+
+async function deleteCloudTool(id) {
+  const { error } = await supabaseClient.from("private_tools").delete().eq("user_id", currentUser.id).eq("id", id);
+  return error;
+}
+
+async function toggleCloudFavorite(id, nextFav) {
+  const { error } = await supabaseClient
+    .from("private_tools")
+    .update({ fav: nextFav })
+    .eq("user_id", currentUser.id)
+    .eq("id", id);
+
+  return error;
+}
+
+async function replaceCloudLibrary(data) {
+  await supabaseClient.from("private_tools").delete().eq("user_id", currentUser.id);
+  await supabaseClient.from("private_categories").delete().eq("user_id", currentUser.id);
+
+  if (data.privateCategories?.length) {
+    const { error } = await supabaseClient.from("private_categories").insert(
+      data.privateCategories.map(cat => ({
+        user_id: currentUser.id,
+        name: cat.name
+      }))
+    );
+    if (error) return error;
+  }
+
+  if (data.privateTools?.length) {
+    const { error } = await supabaseClient.from("private_tools").insert(
+      data.privateTools.map(tool => ({
+        id: tool.id || generateId(),
+        user_id: currentUser.id,
+        name: tool.name,
+        link: sanitizeUrl(tool.link),
+        cat: tool.cat,
+        fav: !!tool.fav
+      }))
+    );
+    if (error) return error;
+  }
+
+  return null;
+}
+
+async function importGuestLibraryToAccount() {
+  if (!currentUser) return showToast("Please log in first.", "error");
+
+  const guestData = {
+    privateCategories: getJSON(KEYS.privateCategories),
+    privateTools: getJSON(KEYS.privateTools)
+  };
+
+  if (!guestData.privateCategories.length && !guestData.privateTools.length) {
+    return showToast("No guest library found to import.", "error");
+  }
+
+  const error = await replaceCloudLibrary(guestData);
+  if (error) {
+    console.error(error);
+    return showToast("Could not import guest library.", "error");
+  }
+
+  await renderLibrary();
+  document.getElementById("importGuestDataBtn")?.classList.add("hidden");
+  showToast("Guest library imported into your account!", "success");
 }
 
 /* ---------------- home page ---------------- */
@@ -763,43 +986,58 @@ async function renderHome() {
   });
 }
 
-/* ---------------- library page ---------------- */
+/* ---------------- library auth ui ---------------- */
 
-function initLibraryPage() {
+async function initLibraryPage() {
   const createCategoryBtn = document.getElementById("createPrivateCategoryBtn");
   const addToolBtn = document.getElementById("addPrivateToolBtn");
   const searchInput = document.getElementById("privateSearch");
   const exportBtn = document.getElementById("exportPrivateBtn");
   const importBtn = document.getElementById("importPrivateBtn");
   const importInput = document.getElementById("importPrivateInput");
-  const generateSyncBtn = document.getElementById("generateSyncBtn");
-  const showEnterCodeBtn = document.getElementById("showEnterCodeBtn");
-  const loadSyncCodeBtn = document.getElementById("loadSyncCodeBtn");
-  const copySyncCodeBtn = document.getElementById("copySyncCodeBtn");
-  const toggleSyncBannerBtn = document.getElementById("toggleSyncBannerBtn");
+  const signupBtn = document.getElementById("userSignupBtn");
+  const loginBtn = document.getElementById("userLoginBtn");
+  const logoutBtn = document.getElementById("userLogoutBtn");
+  const importGuestBtn = document.getElementById("importGuestDataBtn");
   const privateToolUrl = document.getElementById("privateToolUrl");
   const privateToolName = document.getElementById("privateToolName");
 
-  setupSyncBanner();
-  renderLibrary();
+  await refreshLibraryAuthUI();
+  await renderLibrary();
 
-  createCategoryBtn?.addEventListener("click", () => {
+  signupBtn?.addEventListener("click", handleUserSignup);
+  loginBtn?.addEventListener("click", handleUserLogin);
+  logoutBtn?.addEventListener("click", handleUserLogout);
+  importGuestBtn?.addEventListener("click", importGuestLibraryToAccount);
+
+  createCategoryBtn?.addEventListener("click", async () => {
     const name = document.getElementById("privateCategoryName").value.trim();
     if (!name) return showToast("Name required!", "error");
 
-    const categories = getJSON(KEYS.privateCategories);
-    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
-      return showToast("Category already exists!", "error");
+    if (currentUser) {
+      const categories = await fetchCloudCategories();
+      if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+        return showToast("Category already exists!", "error");
+      }
+
+      const error = await createCloudCategory(name);
+      if (error) return showToast("Could not create category", "error");
+    } else {
+      const categories = getJSON(KEYS.privateCategories);
+      if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+        return showToast("Category already exists!", "error");
+      }
+
+      categories.push({ name });
+      setJSON(KEYS.privateCategories, categories);
     }
 
-    categories.push({ name });
-    setJSON(KEYS.privateCategories, categories);
     document.getElementById("privateCategoryName").value = "";
-    renderLibrary();
+    await renderLibrary();
     showToast("Category created!", "success");
   });
 
-  addToolBtn?.addEventListener("click", () => {
+  addToolBtn?.addEventListener("click", async () => {
     const name = privateToolName.value.trim();
     const link = sanitizeUrl(privateToolUrl.value.trim());
     const cat = document.getElementById("privateToolCategory").value;
@@ -809,15 +1047,20 @@ function initLibraryPage() {
     if (!isValidUrl(link)) return showToast("Please enter a valid URL!", "error");
     if (!cat) return showToast("Please select a category!", "error");
 
-    const tools = getJSON(KEYS.privateTools);
-    tools.push({ id: generateId(), name, link, cat, fav });
-    setJSON(KEYS.privateTools, tools);
+    if (currentUser) {
+      const error = await createCloudTool({ name, link, cat, fav });
+      if (error) return showToast("Could not add tool", "error");
+    } else {
+      const tools = getJSON(KEYS.privateTools);
+      tools.push({ id: generateId(), name, link, cat, fav });
+      setJSON(KEYS.privateTools, tools);
+    }
 
     privateToolName.value = "";
     privateToolUrl.value = "";
     document.getElementById("privateToolFav").checked = false;
 
-    renderLibrary();
+    await renderLibrary();
     showToast("Tool added!", "success");
   });
 
@@ -829,71 +1072,94 @@ function initLibraryPage() {
 
   searchInput?.addEventListener("input", renderLibrary);
 
-  exportBtn?.addEventListener("click", () => {
-    downloadJSON("my-library-backup.json", {
-      privateCategories: getJSON(KEYS.privateCategories),
-      privateTools: getJSON(KEYS.privateTools)
-    });
+  exportBtn?.addEventListener("click", async () => {
+    const data = currentUser
+      ? {
+          privateCategories: await fetchCloudCategories(),
+          privateTools: await fetchCloudTools()
+        }
+      : {
+          privateCategories: getJSON(KEYS.privateCategories),
+          privateTools: getJSON(KEYS.privateTools)
+        };
+
+    downloadJSON("my-library-backup.json", data);
     showToast("Data exported!", "success");
   });
 
   importBtn?.addEventListener("click", () => importInput.click());
+
   importInput?.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    parseJSONFile(file, (data) => {
+    parseJSONFile(file, async (data) => {
       if (!data.privateCategories || !data.privateTools) {
         return showToast("Invalid file. Please select a valid backup file.", "error");
       }
 
-      setJSON(KEYS.privateCategories, data.privateCategories);
-      setJSON(KEYS.privateTools, data.privateTools);
-      renderLibrary();
+      if (currentUser) {
+        const error = await replaceCloudLibrary(data);
+        if (error) {
+          console.error(error);
+          return showToast("Could not import library", "error");
+        }
+      } else {
+        setJSON(KEYS.privateCategories, data.privateCategories);
+        setJSON(KEYS.privateTools, data.privateTools);
+      }
+
+      await renderLibrary();
       showToast("Data imported successfully", "info");
     });
 
     e.target.value = "";
   });
+}
 
-  generateSyncBtn?.addEventListener("click", generateSyncCodeFlow);
-  showEnterCodeBtn?.addEventListener("click", () => {
-    document.getElementById("enterCodeWrap").classList.toggle("hidden");
-  });
+async function refreshLibraryAuthUI() {
+  const guestAuthWrap = document.getElementById("guestAuthWrap");
+  const accountWrap = document.getElementById("accountWrap");
+  const libraryModeText = document.getElementById("libraryModeText");
+  const accountEmailText = document.getElementById("accountEmailText");
+  const importGuestBtn = document.getElementById("importGuestDataBtn");
 
-  loadSyncCodeBtn?.addEventListener("click", loadFromSyncCode);
+  if (!libraryModeText) return;
 
-  copySyncCodeBtn?.addEventListener("click", async () => {
-    const code = document.getElementById("syncCodeText").textContent.trim();
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      showToast("Sync code copied!", "success");
-    } catch {
-      showToast("Could not copy code", "error");
+  if (currentUser) {
+    guestAuthWrap?.classList.add("hidden");
+    accountWrap?.classList.remove("hidden");
+    libraryModeText.textContent = "You are logged in. Your library now syncs across your devices.";
+    if (accountEmailText) accountEmailText.textContent = `Logged in as ${currentUser.email || "user"}`;
+
+    if (importGuestBtn) {
+      importGuestBtn.classList.toggle("hidden", !hasGuestLibraryData());
     }
-  });
-
-  toggleSyncBannerBtn?.addEventListener("click", () => {
-    const current = localStorage.getItem(KEYS.syncBannerCollapsed) === "true";
-    localStorage.setItem(KEYS.syncBannerCollapsed, String(!current));
-    setupSyncBanner();
-  });
+  } else {
+    guestAuthWrap?.classList.remove("hidden");
+    accountWrap?.classList.add("hidden");
+    libraryModeText.textContent = "You are using guest mode. Your library is saved only on this device.";
+  }
 }
 
-function setupSyncBanner() {
-  const body = document.getElementById("syncBannerBody");
-  const btn = document.getElementById("toggleSyncBannerBtn");
-  if (!body || !btn) return;
+async function getLibraryData() {
+  if (currentUser) {
+    const [categories, tools] = await Promise.all([
+      fetchCloudCategories(),
+      fetchCloudTools()
+    ]);
+    return { categories, tools, mode: "cloud" };
+  }
 
-  const collapsed = localStorage.getItem(KEYS.syncBannerCollapsed) === "true";
-  body.classList.toggle("hidden", collapsed);
-  btn.textContent = collapsed ? "+" : "—";
+  return {
+    categories: getJSON(KEYS.privateCategories),
+    tools: getJSON(KEYS.privateTools),
+    mode: "guest"
+  };
 }
 
-function renderLibrary() {
-  const categories = getJSON(KEYS.privateCategories);
-  const tools = getJSON(KEYS.privateTools);
+async function renderLibrary() {
+  const { categories, tools, mode } = await getLibraryData();
   const collapsed = getJSON(KEYS.libraryCollapsed, {});
   const searchTerm = (document.getElementById("privateSearch")?.value || "").trim().toLowerCase();
   const isSearching = searchTerm.length > 0;
@@ -920,21 +1186,20 @@ function renderLibrary() {
     categoriesContainer.innerHTML = `
       <div class="empty-state">
         <div class="empty-emoji">📁</div>
-        <strong>Your library is empty! Create a category to get started</strong>
-        <div>Start building your library!</div>
-        <div>Create your first category above and add links you want to save</div>
+        <strong>Your ${mode === "cloud" ? "cloud" : "guest"} library is empty!</strong>
+        <div>Create a category and start saving your links.</div>
       </div>
     `;
     favoritesSection.classList.add("hidden");
     searchSection.classList.add("hidden");
-    stats.textContent = "You have saved 0 links across 0 categories";
+    stats.textContent = `You have saved 0 links across 0 categories`;
     return;
   }
 
   const matchingTools = tools
     .filter(tool => {
       if (!searchTerm) return true;
-      return tool.name.toLowerCase().includes(searchTerm) || tool.cat.toLowerCase().includes(searchTerm);
+      return (tool.name || "").toLowerCase().includes(searchTerm) || (tool.cat || "").toLowerCase().includes(searchTerm);
     })
     .sort((a, b) => scoreTool(b, searchTerm) - scoreTool(a, searchTerm));
 
@@ -997,28 +1262,40 @@ function renderLibrary() {
     const actions = document.createElement("div");
     actions.className = "category-actions";
 
-    const upBtn = createMiniButton("↑", "Move up", (e) => {
-      e.stopPropagation();
-      moveLocalCategory(KEYS.privateCategories, catIndex, -1);
-      renderLibrary();
-    });
+    if (!currentUser) {
+      const upBtn = createMiniButton("↑", "Move up", (e) => {
+        e.stopPropagation();
+        moveLocalCategory(KEYS.privateCategories, catIndex, -1);
+        renderLibrary();
+      });
 
-    const downBtn = createMiniButton("↓", "Move down", (e) => {
-      e.stopPropagation();
-      moveLocalCategory(KEYS.privateCategories, catIndex, 1);
-      renderLibrary();
-    });
+      const downBtn = createMiniButton("↓", "Move down", (e) => {
+        e.stopPropagation();
+        moveLocalCategory(KEYS.privateCategories, catIndex, 1);
+        renderLibrary();
+      });
+
+      actions.append(upBtn, downBtn);
+    }
 
     const delBtn = createMiniButton("🗑", "Delete category", (e) => {
       e.stopPropagation();
-      showConfirm("Delete this category?", "Delete this category and all tools inside?", () => {
-        deletePrivateCategory(cat.name);
+      showConfirm("Delete this category?", "Delete this category and all tools inside?", async () => {
+        if (currentUser) {
+          const error = await deleteCloudCategory(cat.name);
+          if (error) return showToast("Could not delete category", "error");
+        } else {
+          deletePrivateCategory(cat.name);
+          return;
+        }
+
+        await renderLibrary();
+        showToast("Category deleted!", "success");
       });
     });
 
     const arrow = createMiniButton(collapsed[cat.name] ? "▸" : "▾", "Toggle category", null);
-
-    actions.append(upBtn, downBtn, delBtn, arrow);
+    actions.append(delBtn, arrow);
 
     head.append(left, actions);
 
@@ -1052,46 +1329,6 @@ function deletePrivateCategory(categoryName) {
   setJSON(KEYS.privateTools, getJSON(KEYS.privateTools).filter(t => t.cat !== categoryName));
   renderLibrary();
   showToast("Category deleted!", "success");
-}
-
-/* ---------------- sync ---------------- */
-
-function generateSyncCode() {
-  const adjectives = ["blue", "bright", "silent", "golden", "cosmic", "rapid", "lucky", "clever"];
-  const animals = ["tiger", "fox", "otter", "falcon", "wolf", "panda", "eagle", "koala"];
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const animal = animals[Math.floor(Math.random() * animals.length)];
-  const num = Math.floor(100 + Math.random() * 900);
-  return `${adj}-${animal}-${num}`;
-}
-
-function generateSyncCodeFlow() {
-  const code = generateSyncCode();
-  localStorage.setItem(`sync_${code}`, JSON.stringify({
-    privateCategories: getJSON(KEYS.privateCategories),
-    privateTools: getJSON(KEYS.privateTools)
-  }));
-  document.getElementById("syncCodeText").textContent = code;
-  document.getElementById("syncCodeBox").classList.remove("hidden");
-  showToast("Sync code generated!", "success");
-}
-
-function loadFromSyncCode() {
-  const code = document.getElementById("syncCodeInput").value.trim();
-  if (!code) return showToast("Please enter a sync code!", "error");
-
-  const raw = localStorage.getItem(`sync_${code}`);
-  if (!raw) return showToast("Code not found. Make sure you're entering it correctly.", "error");
-
-  try {
-    const data = JSON.parse(raw);
-    setJSON(KEYS.privateCategories, data.privateCategories || []);
-    setJSON(KEYS.privateTools, data.privateTools || []);
-    renderLibrary();
-    showToast("Library loaded from sync code!", "info");
-  } catch {
-    showToast("Code not found. Make sure you're entering it correctly.", "error");
-  }
 }
 
 /* ---------------- cards ---------------- */
@@ -1135,9 +1372,18 @@ function createLinkCard(tool, type, showCategory = false) {
         const { error } = await supabaseClient.from("public_tools").delete().eq("id", tool.id);
         if (error) return showToast("Could not delete tool", "error");
         await renderHome();
+        showToast("Tool deleted!", "success");
+        return;
+      }
+
+      if (currentUser) {
+        const error = await deleteCloudTool(tool.id);
+        if (error) return showToast("Could not delete tool", "error");
+        await renderLibrary();
       } else {
         deletePrivateTool(tool.id);
       }
+
       showToast("Tool deleted!", "success");
     });
   });
@@ -1190,6 +1436,13 @@ function createLinkCard(tool, type, showCategory = false) {
 
         if (error) return showToast("Could not update favorite", "error");
         await renderHome();
+        return;
+      }
+
+      if (currentUser) {
+        const error = await toggleCloudFavorite(tool.id, !tool.fav);
+        if (error) return showToast("Could not update favorite", "error");
+        await renderLibrary();
       } else {
         togglePrivateFavorite(tool.id);
       }
