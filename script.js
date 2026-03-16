@@ -147,8 +147,6 @@ async function handleUserLogin() {
   closeModalById("accountModal");
 
   if (guestHasData && currentUser) {
-    const importBtn = document.getElementById("importGuestDataBtn");
-    if (importBtn) importBtn.classList.remove("hidden");
     showToast("Logged in! You can import your guest library into this account.", "success");
   } else {
     showToast("Logged in!", "success");
@@ -600,6 +598,7 @@ async function fetchPublicTools() {
 
 async function fetchCloudCategories() {
   if (!currentUser) return [];
+
   const { data, error } = await supabaseClient
     .from("private_categories")
     .select("*")
@@ -618,6 +617,7 @@ async function fetchCloudCategories() {
 
 async function fetchCloudTools() {
   if (!currentUser) return [];
+
   const { data, error } = await supabaseClient
     .from("private_tools")
     .select("*")
@@ -634,33 +634,59 @@ async function fetchCloudTools() {
 }
 
 async function createCloudCategory(name) {
+  const cleanName = (name || "").trim();
+  if (!cleanName) return new Error("Invalid category name");
+
   const { error } = await supabaseClient.from("private_categories").insert({
     user_id: currentUser.id,
-    name
+    name: cleanName
   });
+
   return error;
 }
 
 async function createCloudTool(tool) {
+  const name = (tool.name || "").trim();
+  const link = sanitizeUrl((tool.link || "").trim());
+  const cat = (tool.cat || "").trim();
+
+  if (!name || !link || !cat) return new Error("Invalid tool data");
+
   const { error } = await supabaseClient.from("private_tools").insert({
     id: generateId(),
     user_id: currentUser.id,
-    name: tool.name,
-    link: tool.link,
-    cat: tool.cat,
+    name,
+    link,
+    cat,
     fav: !!tool.fav
   });
+
   return error;
 }
 
 async function deleteCloudCategory(categoryName) {
-  await supabaseClient.from("private_tools").delete().eq("user_id", currentUser.id).eq("cat", categoryName);
-  const { error } = await supabaseClient.from("private_categories").delete().eq("user_id", currentUser.id).eq("name", categoryName);
+  await supabaseClient
+    .from("private_tools")
+    .delete()
+    .eq("user_id", currentUser.id)
+    .eq("cat", categoryName);
+
+  const { error } = await supabaseClient
+    .from("private_categories")
+    .delete()
+    .eq("user_id", currentUser.id)
+    .eq("name", categoryName);
+
   return error;
 }
 
 async function deleteCloudTool(id) {
-  const { error } = await supabaseClient.from("private_tools").delete().eq("user_id", currentUser.id).eq("id", id);
+  const { error } = await supabaseClient
+    .from("private_tools")
+    .delete()
+    .eq("user_id", currentUser.id)
+    .eq("id", id);
+
   return error;
 }
 
@@ -675,8 +701,44 @@ async function toggleCloudFavorite(id, nextFav) {
 }
 
 async function replaceCloudLibrary(data) {
-  async function mergeGuestLibraryIntoAccount(data) {
-  if (!currentUser) return { error: new Error("No logged-in user") };
+  await supabaseClient.from("private_tools").delete().eq("user_id", currentUser.id);
+  await supabaseClient.from("private_categories").delete().eq("user_id", currentUser.id);
+
+  if (data.privateCategories?.length) {
+    const { error } = await supabaseClient.from("private_categories").insert(
+      data.privateCategories
+        .filter(cat => (cat.name || "").trim())
+        .map(cat => ({
+          user_id: currentUser.id,
+          name: cat.name.trim()
+        }))
+    );
+    if (error) return error;
+  }
+
+  if (data.privateTools?.length) {
+    const { error } = await supabaseClient.from("private_tools").insert(
+      data.privateTools
+        .filter(tool => (tool.name || "").trim() && (tool.link || "").trim() && (tool.cat || "").trim())
+        .map(tool => ({
+          id: tool.id || generateId(),
+          user_id: currentUser.id,
+          name: tool.name.trim(),
+          link: sanitizeUrl(tool.link),
+          cat: tool.cat.trim(),
+          fav: !!tool.fav
+        }))
+    );
+    if (error) return error;
+  }
+
+  return null;
+}
+
+async function mergeGuestLibraryIntoAccount(data) {
+  if (!currentUser) {
+    return { error: new Error("No logged-in user"), addedCategories: 0, addedTools: 0 };
+  }
 
   const existingCategories = await fetchCloudCategories();
   const existingTools = await fetchCloudTools();
@@ -686,9 +748,12 @@ async function replaceCloudLibrary(data) {
   );
 
   const existingToolKeys = new Set(
-    existingTools.map(tool =>
-      `${(tool.name || "").trim().toLowerCase()}|${sanitizeUrl(tool.link || "").toLowerCase()}|${(tool.cat || "").trim().toLowerCase()}`
-    )
+    existingTools.map(tool => {
+      const name = (tool.name || "").trim().toLowerCase();
+      const link = sanitizeUrl((tool.link || "").trim()).toLowerCase();
+      const cat = (tool.cat || "").trim().toLowerCase();
+      return `${name}|${link}|${cat}`;
+    })
   );
 
   const categoriesToInsert = [];
@@ -715,11 +780,17 @@ async function replaceCloudLibrary(data) {
 
     if (!name || !link || !cat) continue;
 
-    const toolKey = `${name.toLowerCase()}|${link.toLowerCase()}|${cat.toLowerCase()}`;
+    if (!existingCategoryNames.has(cat.toLowerCase())) {
+      existingCategoryNames.add(cat.toLowerCase());
+      categoriesToInsert.push({
+        user_id: currentUser.id,
+        name: cat
+      });
+    }
 
+    const toolKey = `${name.toLowerCase()}|${link.toLowerCase()}|${cat.toLowerCase()}`;
     if (!existingToolKeys.has(toolKey)) {
       existingToolKeys.add(toolKey);
-
       toolsToInsert.push({
         id: generateId(),
         user_id: currentUser.id,
@@ -728,25 +799,25 @@ async function replaceCloudLibrary(data) {
         cat,
         fav: !!tool.fav
       });
-
-      if (!existingCategoryNames.has(cat.toLowerCase())) {
-        existingCategoryNames.add(cat.toLowerCase());
-        categoriesToInsert.push({
-          user_id: currentUser.id,
-          name: cat
-        });
-      }
     }
   }
 
   if (categoriesToInsert.length) {
-    const { error } = await supabaseClient.from("private_categories").insert(categoriesToInsert);
-    if (error) return { error };
+    const { error } = await supabaseClient
+      .from("private_categories")
+      .insert(categoriesToInsert);
+    if (error) {
+      return { error, addedCategories: 0, addedTools: 0 };
+    }
   }
 
   if (toolsToInsert.length) {
-    const { error } = await supabaseClient.from("private_tools").insert(toolsToInsert);
-    if (error) return { error };
+    const { error } = await supabaseClient
+      .from("private_tools")
+      .insert(toolsToInsert);
+    if (error) {
+      return { error, addedCategories: categoriesToInsert.length, addedTools: 0 };
+    }
   }
 
   return {
@@ -755,49 +826,24 @@ async function replaceCloudLibrary(data) {
     addedTools: toolsToInsert.length
   };
 }
-  await supabaseClient.from("private_tools").delete().eq("user_id", currentUser.id);
-  await supabaseClient.from("private_categories").delete().eq("user_id", currentUser.id);
-
-  if (data.privateCategories?.length) {
-    const { error } = await supabaseClient.from("private_categories").insert(
-      data.privateCategories.map(cat => ({
-        user_id: currentUser.id,
-        name: cat.name
-      }))
-    );
-    if (error) return error;
-  }
-
-  if (data.privateTools?.length) {
-    const { error } = await supabaseClient.from("private_tools").insert(
-      data.privateTools.map(tool => ({
-        id: tool.id || generateId(),
-        user_id: currentUser.id,
-        name: tool.name,
-        link: sanitizeUrl(tool.link),
-        cat: tool.cat,
-        fav: !!tool.fav
-      }))
-    );
-    if (error) return error;
-  }
-
-  return null;
-}
 
 async function importGuestLibraryToAccount() {
-  if (!currentUser) return showToast("Please log in first.", "error");
+  if (!currentUser) {
+    showToast("Please log in first.", "error");
+    return;
+  }
+
   if (isImportingGuestLibrary) return;
 
   const importBtn = document.getElementById("importGuestDataBtn");
-
   const guestData = {
-    privateCategories: getJSON(KEYS.privateCategories),
-    privateTools: getJSON(KEYS.privateTools)
+    privateCategories: getJSON(KEYS.privateCategories, []),
+    privateTools: getJSON(KEYS.privateTools, [])
   };
 
   if (!guestData.privateCategories.length && !guestData.privateTools.length) {
-    return showToast("No guest library found to import.", "error");
+    showToast("No guest library found to import.", "error");
+    return;
   }
 
   try {
@@ -816,6 +862,7 @@ async function importGuestLibraryToAccount() {
       return;
     }
 
+    await refreshLibraryAuthUI();
     await renderLibrary();
 
     if (importBtn) {
@@ -830,6 +877,9 @@ async function importGuestLibraryToAccount() {
         "success"
       );
     }
+  } catch (err) {
+    console.error(err);
+    showToast("Import failed unexpectedly.", "error");
   } finally {
     isImportingGuestLibrary = false;
 
@@ -839,6 +889,7 @@ async function importGuestLibraryToAccount() {
     }
   }
 }
+
 /* ---------------- home page ---------------- */
 
 async function initHomePage() {
@@ -1300,11 +1351,19 @@ async function refreshLibraryAuthUI() {
 
     if (importGuestBtn) {
       importGuestBtn.classList.toggle("hidden", !hasGuestLibraryData());
+      importGuestBtn.disabled = false;
+      importGuestBtn.textContent = "Import Guest Library";
     }
   } else {
     guestAuthWrap?.classList.remove("hidden");
     accountWrap?.classList.add("hidden");
     libraryModeText.textContent = "You are using guest mode. Your library is saved only on this device.";
+
+    if (importGuestBtn) {
+      importGuestBtn.classList.add("hidden");
+      importGuestBtn.disabled = false;
+      importGuestBtn.textContent = "Import Guest Library";
+    }
   }
 }
 
@@ -1349,6 +1408,7 @@ async function renderLibrary() {
 
   if (!categories.length && !tools.length) {
     categoriesSection.classList.remove("hidden");
+    searchSection.classList.add("hidden");
     categoriesContainer.innerHTML = `
       <div class="empty-state">
         <div class="empty-emoji">📁</div>
@@ -1357,7 +1417,6 @@ async function renderLibrary() {
       </div>
     `;
     favoritesSection.classList.add("hidden");
-    searchSection.classList.add("hidden");
     stats.textContent = `You have saved 0 links across 0 categories`;
     return;
   }
