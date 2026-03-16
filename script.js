@@ -9,14 +9,20 @@ const supabaseClient = window.supabase
 const KEYS = {
   privateCategories: "privateCategories",
   privateTools: "privateTools",
-  libraryCollapsed: "libraryCollapsedCategories"
+  libraryCollapsed: "libraryCollapsedCategories",
+  guestImportDismissed: "guestImportDismissed"
 };
+
+const APP_BASE_URL = "https://itskachra12-arch.github.io/ultron/";
+const RESET_REDIRECT_URL = APP_BASE_URL + "library.html?reset=1";
 
 let isAdmin = false;
 let confirmCallback = null;
 let editingPublicToolId = null;
 let currentUser = null;
 let isImportingGuestLibrary = false;
+let currentAdminTab = "feedback";
+let deleteAccountSupported = false;
 
 document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
@@ -26,21 +32,26 @@ document.addEventListener("DOMContentLoaded", async () => {
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       currentUser = session?.user || null;
       isAdmin = currentUser?.id === ADMIN_USER_ID;
+
+      updateLibraryModeIndicator();
       updateAdminUI();
 
       const page = document.body.dataset.page;
 
       if (page === "home") {
-        setTimeout(async () => {
-          await renderHome();
-        }, 0);
+        if (isAdmin) {
+          await loadAdminFeedback();
+        }
+        await renderHome();
       }
 
       if (page === "library") {
-        setTimeout(async () => {
-          await refreshLibraryAuthUI();
-          await renderLibrary();
-        }, 0);
+        await refreshLibraryAuthUI();
+        await renderLibrary();
+
+        if (event === "SIGNED_IN" && currentUser) {
+          maybePromptGuestImport();
+        }
       }
     });
 
@@ -49,6 +60,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     isAdmin = currentUser?.id === ADMIN_USER_ID;
   }
 
+  updateLibraryModeIndicator();
   updateAdminUI();
 
   const page = document.body.dataset.page;
@@ -77,13 +89,16 @@ async function handleAdminLogin() {
   const user = data?.user;
   if (!user || user.id !== ADMIN_USER_ID) {
     await supabaseClient.auth.signOut();
-    return showToast("This account is not authorized as admin.", "error");
+    return showToast("This account does not have admin access.", "error");
   }
 
   currentUser = user;
   isAdmin = true;
-  closeAdminModal();
+  closeAdminLoginModal();
+  openModalById("adminPanelModal");
+  switchAdminTab("feedback");
   updateAdminUI();
+  await loadAdminFeedback();
   await renderHome();
   showToast("Logged in as admin!", "success");
 }
@@ -95,6 +110,7 @@ async function handleAdminLogout() {
   currentUser = null;
   isAdmin = false;
   updateAdminUI();
+  closeModalById("adminPanelModal");
   await renderHome();
   showToast("Logged out", "info");
 }
@@ -111,7 +127,13 @@ async function handleUserSignup() {
     return showToast("Password should be at least 6 characters.", "error");
   }
 
-  const { error } = await supabaseClient.auth.signUp({ email, password });
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: RESET_REDIRECT_URL
+    }
+  });
 
   if (error) {
     return showToast(error.message, "error");
@@ -120,7 +142,20 @@ async function handleUserSignup() {
   document.getElementById("userSignupEmail").value = "";
   document.getElementById("userSignupPassword").value = "";
 
-  showToast("Signup successful! Please confirm your email, then log in.", "success");
+  const authMsg = document.getElementById("authSuccessMessage");
+  if (data?.session) {
+    if (authMsg) {
+      authMsg.textContent = "Account created successfully. You are now logged in.";
+      authMsg.classList.remove("hidden");
+    }
+    showToast("Account created and logged in!", "success");
+  } else {
+    if (authMsg) {
+      authMsg.textContent = "Account created. Please check your email to confirm your account.";
+      authMsg.classList.remove("hidden");
+    }
+    showToast("Signup successful. Check your email.", "success");
+  }
 }
 
 async function handleUserLogin() {
@@ -147,46 +182,106 @@ async function handleUserLogin() {
   closeModalById("accountModal");
 
   if (guestHasData && currentUser) {
-    showToast("Logged in! You can import your guest library into this account.", "success");
-  } else {
-    showToast("Logged in!", "success");
+    maybePromptGuestImport(true);
   }
+
+  showToast("Logged in!", "success");
 }
 
 async function handleUserLogout() {
-  const { error } = await supabaseClient.auth.signOut();
-  if (error) return showToast("Logout failed", "error");
+  showConfirm("Log Out", "Are you sure you want to log out?", async () => {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) return showToast("Logout failed", "error");
 
-  currentUser = null;
-  isAdmin = false;
+    currentUser = null;
+    isAdmin = false;
 
-  await refreshLibraryAuthUI();
-  await renderLibrary();
-  closeModalById("accountModal");
-  showToast("Logged out. Back to guest mode.", "info");
+    await refreshLibraryAuthUI();
+    updateLibraryModeIndicator();
+    await renderLibrary();
+    closeModalById("accountModal");
+    showToast("Logged out. Back to guest mode.", "info");
+  }, "Log Out");
+}
+
+async function sendForgotPassword(email, messageTargetId = "forgotPasswordMessage") {
+  const cleanEmail = (email || "").trim();
+  if (!cleanEmail) {
+    return showToast("Please enter your email.", "error");
+  }
+
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: RESET_REDIRECT_URL
+  });
+
+  if (error) {
+    return showToast(error.message, "error");
+  }
+
+  const box = document.getElementById(messageTargetId);
+  if (box) {
+    box.textContent = "Password reset email sent. Please check your inbox and spam/junk folder.";
+    box.classList.remove("hidden");
+  }
+
+  showToast("Password reset email sent.", "success");
+}
+
+async function handleResetPasswordSave() {
+  const newPassword = document.getElementById("resetNewPassword")?.value.trim() || "";
+  const confirmPassword = document.getElementById("resetConfirmPassword")?.value.trim() || "";
+  const box = document.getElementById("resetPasswordMessage");
+
+  if (!newPassword || !confirmPassword) {
+    return showToast("Please fill both password fields.", "error");
+  }
+
+  if (newPassword.length < 6) {
+    return showToast("Password should be at least 6 characters.", "error");
+  }
+
+  if (newPassword !== confirmPassword) {
+    return showToast("Passwords do not match.", "error");
+  }
+
+  const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+
+  if (error) {
+    return showToast(error.message, "error");
+  }
+
+  if (box) {
+    box.textContent = "Password updated successfully. You can now log in.";
+    box.classList.remove("hidden");
+  }
+
+  document.getElementById("resetNewPassword").value = "";
+  document.getElementById("resetConfirmPassword").value = "";
+
+  setTimeout(() => {
+    showAccountView("login");
+  }, 900);
 }
 
 function updateAdminUI() {
-  const adminBtn = document.getElementById("adminToggleBtn");
-  const adminPanel = document.getElementById("adminPanelSection");
-
-  if (adminBtn) {
-    adminBtn.textContent = isAdmin ? "🔓 Logout" : "🔒 Admin";
-  }
-
-  if (adminPanel) {
-    adminPanel.classList.toggle("hidden", !isAdmin);
+  if (!document.body || document.body.dataset.page !== "home") return;
+  if (!isAdmin) {
+    closeModalById("adminPanelModal");
   }
 }
 
-function closeAdminModal() {
-  const modal = document.getElementById("adminModal");
+function closeAdminLoginModal() {
+  const modal = document.getElementById("adminLoginModal");
   const emailInput = document.getElementById("adminEmailInput");
   const passwordInput = document.getElementById("adminPasswordInput");
+  const forgotInput = document.getElementById("adminForgotEmailInput");
+  const forgotWrap = document.getElementById("adminForgotWrap");
 
   if (modal) modal.classList.add("hidden");
   if (emailInput) emailInput.value = "";
   if (passwordInput) passwordInput.value = "";
+  if (forgotInput) forgotInput.value = "";
+  if (forgotWrap) forgotWrap.classList.add("hidden");
 }
 
 /* ---------------- local helpers ---------------- */
@@ -228,9 +323,12 @@ function setupSharedUI() {
   setupScrollTop();
   setupKeyboardShortcut();
   setupAdminModal();
+  setupAdminTabs();
   setupEditModal();
   setupCustomModals();
   setupPasswordToggles();
+  setupAccountViews();
+  setupDeleteAccountFlow();
 }
 
 function setupToasts() {
@@ -258,9 +356,10 @@ function setupConfirmModal() {
   const deleteBtn = document.getElementById("confirmDelete");
   const backdrop = modal.querySelector("[data-close-modal]");
 
-  window.showConfirm = function (title, text, onConfirm) {
+  window.showConfirm = function (title, text, onConfirm, confirmText = "Delete") {
     document.getElementById("confirmTitle").textContent = title;
     document.getElementById("confirmText").textContent = text;
+    if (deleteBtn) deleteBtn.textContent = confirmText;
     confirmCallback = onConfirm;
     modal.classList.remove("hidden");
   };
@@ -268,6 +367,7 @@ function setupConfirmModal() {
   function closeConfirm() {
     modal.classList.add("hidden");
     confirmCallback = null;
+    if (deleteBtn) deleteBtn.textContent = "Delete";
   }
 
   cancelBtn?.addEventListener("click", closeConfirm);
@@ -279,33 +379,78 @@ function setupConfirmModal() {
 }
 
 function setupAdminModal() {
-  const modal = document.getElementById("adminModal");
-  if (!modal) return;
-
-  const cancelBtn = document.getElementById("adminCancelBtn");
+  const loginModal = document.getElementById("adminLoginModal");
   const loginBtn = document.getElementById("adminLoginBtn");
-  const emailInput = document.getElementById("adminEmailInput");
+  const cancelBtn = document.getElementById("adminCancelBtn");
   const passwordInput = document.getElementById("adminPasswordInput");
-  const backdrop = modal.querySelector("[data-close-admin-modal]");
-  const adminBtn = document.getElementById("adminToggleBtn");
+  const backdrop = document.querySelector("[data-close-admin-login-modal]");
+  const adminPanelBackdrop = document.querySelector("[data-close-admin-panel-modal]");
+  const adminPanelCloseBtn = document.getElementById("adminPanelCloseBtn");
+  const adminLogoutBtn = document.getElementById("adminLogoutBtn");
+  const adminForgotPasswordBtn = document.getElementById("adminForgotPasswordBtn");
+  const adminSendResetBtn = document.getElementById("adminSendResetBtn");
 
-  function open() {
-    modal.classList.remove("hidden");
-    setTimeout(() => emailInput?.focus(), 50);
+  function openAdminEntry() {
+    if (isAdmin && currentUser?.id === ADMIN_USER_ID) {
+      openModalById("adminPanelModal");
+      switchAdminTab("feedback");
+      loadAdminFeedback();
+    } else {
+      loginModal?.classList.remove("hidden");
+      setTimeout(() => document.getElementById("adminEmailInput")?.focus(), 50);
+    }
   }
 
-  cancelBtn?.addEventListener("click", closeAdminModal);
-  backdrop?.addEventListener("click", closeAdminModal);
+  window.openAdminEntry = openAdminEntry;
+
+  cancelBtn?.addEventListener("click", closeAdminLoginModal);
+  backdrop?.addEventListener("click", closeAdminLoginModal);
+  adminPanelBackdrop?.addEventListener("click", () => closeModalById("adminPanelModal"));
+  adminPanelCloseBtn?.addEventListener("click", () => closeModalById("adminPanelModal"));
+  adminLogoutBtn?.addEventListener("click", handleAdminLogout);
+
   loginBtn?.addEventListener("click", handleAdminLogin);
 
   passwordInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") loginBtn?.click();
   });
 
-  adminBtn?.addEventListener("click", () => {
-    if (isAdmin) handleAdminLogout();
-    else open();
+  adminForgotPasswordBtn?.addEventListener("click", () => {
+    document.getElementById("adminForgotWrap")?.classList.toggle("hidden");
   });
+
+  adminSendResetBtn?.addEventListener("click", async () => {
+    const email = document.getElementById("adminForgotEmailInput")?.value.trim() || document.getElementById("adminEmailInput")?.value.trim() || "";
+    await sendForgotPassword(email, "adminLoginMessage");
+  });
+}
+
+function setupAdminTabs() {
+  const buttons = document.querySelectorAll("[data-admin-tab]");
+  buttons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      switchAdminTab(btn.dataset.adminTab);
+    });
+  });
+
+  const feedbackFilter = document.getElementById("adminFeedbackFilter");
+  feedbackFilter?.addEventListener("change", loadAdminFeedback);
+}
+
+function switchAdminTab(tabName) {
+  currentAdminTab = tabName;
+  document.querySelectorAll("[data-admin-tab]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.adminTab === tabName);
+  });
+
+  ["feedback", "tools", "categories", "backup"].forEach(tab => {
+    const panel = document.getElementById(`adminTabPanel${capitalize(tab)}`);
+    if (panel) panel.classList.toggle("hidden", tab !== tabName);
+  });
+
+  if (tabName === "feedback") {
+    loadAdminFeedback();
+  }
 }
 
 function setupEditModal() {
@@ -362,21 +507,134 @@ function setupEditModal() {
 }
 
 function setupCustomModals() {
-  const openAccountModalBtn = document.getElementById("openAccountModalBtn");
-  const closeAccountModalBtn = document.getElementById("closeAccountModalBtn");
-  const accountBackdrop = document.querySelector("[data-close-account-modal]");
-
   const openQuickAddModalBtn = document.getElementById("openQuickAddModalBtn");
   const closeQuickAddModalBtn = document.getElementById("closeQuickAddModalBtn");
   const quickAddBackdrop = document.querySelector("[data-close-quick-add-modal]");
 
-  openAccountModalBtn?.addEventListener("click", () => openModalById("accountModal"));
-  closeAccountModalBtn?.addEventListener("click", () => closeModalById("accountModal"));
-  accountBackdrop?.addEventListener("click", () => closeModalById("accountModal"));
+  const modeBtn = document.getElementById("libraryModeBtn");
+  const closeAccountModalBtn = document.getElementById("closeAccountModalBtn");
+  const accountBackdrop = document.querySelector("[data-close-account-modal]");
 
   openQuickAddModalBtn?.addEventListener("click", () => openModalById("quickAddModal"));
   closeQuickAddModalBtn?.addEventListener("click", () => closeModalById("quickAddModal"));
   quickAddBackdrop?.addEventListener("click", () => closeModalById("quickAddModal"));
+
+  modeBtn?.addEventListener("click", async () => {
+    openModalById("accountModal");
+    if (currentUser) {
+      showAccountView("active");
+    } else {
+      showAccountView("signup");
+    }
+    await refreshLibraryAuthUI();
+  });
+
+  closeAccountModalBtn?.addEventListener("click", () => closeModalById("accountModal"));
+  accountBackdrop?.addEventListener("click", () => closeModalById("accountModal"));
+
+  const guestImportNowBtn = document.getElementById("guestImportNowBtn");
+  const guestImportNotNowBtn = document.getElementById("guestImportNotNowBtn");
+  const guestImportDontAskBtn = document.getElementById("guestImportDontAskBtn");
+
+  guestImportNowBtn?.addEventListener("click", async () => {
+    closeModalById("guestImportPromptModal");
+    await importGuestLibraryToAccount();
+  });
+
+  guestImportNotNowBtn?.addEventListener("click", () => {
+    closeModalById("guestImportPromptModal");
+  });
+
+  guestImportDontAskBtn?.addEventListener("click", () => {
+    localStorage.setItem(KEYS.guestImportDismissed, "1");
+    closeModalById("guestImportPromptModal");
+    refreshLibraryAuthUI();
+  });
+}
+
+function setupAccountViews() {
+  const switchToLoginBtn = document.getElementById("switchToLoginBtn");
+  const switchToSignupBtn = document.getElementById("switchToSignupBtn");
+  const openForgotPasswordBtn = document.getElementById("openForgotPasswordBtn");
+  const backToLoginBtn = document.getElementById("backToLoginBtn");
+  const sendForgotPasswordBtn = document.getElementById("sendForgotPasswordBtn");
+  const saveNewPasswordBtn = document.getElementById("saveNewPasswordBtn");
+
+  switchToLoginBtn?.addEventListener("click", () => showAccountView("login"));
+  switchToSignupBtn?.addEventListener("click", () => showAccountView("signup"));
+  openForgotPasswordBtn?.addEventListener("click", () => showAccountView("forgot"));
+  backToLoginBtn?.addEventListener("click", () => showAccountView("login"));
+
+  sendForgotPasswordBtn?.addEventListener("click", async () => {
+    const email = document.getElementById("forgotPasswordEmail")?.value.trim() || "";
+    await sendForgotPassword(email, "forgotPasswordMessage");
+  });
+
+  saveNewPasswordBtn?.addEventListener("click", handleResetPasswordSave);
+}
+
+function showAccountView(view) {
+  const guestView = document.getElementById("accountGuestView");
+  const loginView = document.getElementById("accountLoginView");
+  const forgotView = document.getElementById("forgotPasswordView");
+  const resetView = document.getElementById("resetPasswordView");
+  const activeView = document.getElementById("accountWrap");
+
+  [guestView, loginView, forgotView, resetView, activeView].forEach(el => el?.classList.add("hidden"));
+
+  if (view === "signup") guestView?.classList.remove("hidden");
+  if (view === "login") loginView?.classList.remove("hidden");
+  if (view === "forgot") forgotView?.classList.remove("hidden");
+  if (view === "reset") resetView?.classList.remove("hidden");
+  if (view === "active") activeView?.classList.remove("hidden");
+}
+
+function setupDeleteAccountFlow() {
+  const openDeleteBtn = document.getElementById("openDeleteAccountBtn");
+  const cancelBtn = document.getElementById("deleteAccountCancelBtn");
+  const continueBtn = document.getElementById("deleteAccountContinueBtn");
+  const confirmBtn = document.getElementById("confirmDeleteAccountBtn");
+  const forgotBtn = document.getElementById("deleteAccountForgotPasswordBtn");
+  const backdrop = document.querySelector("[data-close-delete-account-modal]");
+
+  openDeleteBtn?.addEventListener("click", () => {
+    if (!deleteAccountSupported) {
+      return showToast("Delete account is not enabled yet.", "info");
+    }
+    openModalById("deleteAccountModal");
+    resetDeleteAccountModal();
+  });
+
+  cancelBtn?.addEventListener("click", () => closeModalById("deleteAccountModal"));
+  backdrop?.addEventListener("click", () => closeModalById("deleteAccountModal"));
+
+  continueBtn?.addEventListener("click", () => {
+    document.getElementById("deleteAccountStep1")?.classList.add("hidden");
+    document.getElementById("deleteAccountStep2")?.classList.remove("hidden");
+  });
+
+  forgotBtn?.addEventListener("click", async () => {
+    closeModalById("deleteAccountModal");
+    openModalById("accountModal");
+    showAccountView("forgot");
+    document.getElementById("forgotPasswordEmail").value = currentUser?.email || "";
+  });
+
+  confirmBtn?.addEventListener("click", async () => {
+    showToast("Secure delete-account backend not enabled yet.", "info");
+  });
+}
+
+function resetDeleteAccountModal() {
+  document.getElementById("deleteAccountStep1")?.classList.remove("hidden");
+  document.getElementById("deleteAccountStep2")?.classList.add("hidden");
+  const password = document.getElementById("deleteAccountPassword");
+  const box = document.getElementById("deleteAccountMessage");
+  if (password) password.value = "";
+  if (box) {
+    box.textContent = "";
+    box.classList.add("hidden");
+  }
 }
 
 function openModalById(id) {
@@ -390,19 +648,22 @@ function closeModalById(id) {
 }
 
 function setupPasswordToggles() {
-  const signupBtn = document.getElementById("toggleSignupPasswordBtn");
-  const loginBtn = document.getElementById("toggleLoginPasswordBtn");
+  const togglePairs = [
+    ["toggleSignupPasswordBtn", "userSignupPassword"],
+    ["toggleLoginPasswordBtn", "userLoginPassword"],
+    ["toggleResetPasswordBtn", "resetNewPassword"],
+    ["toggleResetConfirmPasswordBtn", "resetConfirmPassword"],
+    ["toggleDeletePasswordBtn", "deleteAccountPassword"],
+    ["toggleAdminPasswordBtn", "adminPasswordInput"]
+  ];
 
-  signupBtn?.addEventListener("click", () => {
-    const input = document.getElementById("userSignupPassword");
-    if (!input) return;
-    input.type = input.type === "password" ? "text" : "password";
-  });
-
-  loginBtn?.addEventListener("click", () => {
-    const input = document.getElementById("userLoginPassword");
-    if (!input) return;
-    input.type = input.type === "password" ? "text" : "password";
+  togglePairs.forEach(([btnId, inputId]) => {
+    const btn = document.getElementById(btnId);
+    btn?.addEventListener("click", () => {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      input.type = input.type === "password" ? "text" : "password";
+    });
   });
 }
 
@@ -434,6 +695,17 @@ function setupKeyboardShortcut() {
     if (e.key === "Escape") {
       closeModalById("accountModal");
       closeModalById("quickAddModal");
+      closeModalById("guestImportPromptModal");
+      closeAdminLoginModal();
+      closeModalById("adminPanelModal");
+      closeModalById("deleteAccountModal");
+    }
+
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      if (document.body.dataset.page === "home") {
+        openAdminEntry();
+      }
     }
   });
 }
@@ -448,8 +720,8 @@ function sanitizeUrl(url) {
 
 function isValidUrl(url) {
   try {
-    new URL(sanitizeUrl(url));
-    return true;
+    const parsed = new URL(sanitizeUrl(url));
+    return ["http:", "https:"].includes(parsed.protocol);
   } catch {
     return false;
   }
@@ -560,6 +832,47 @@ function scoreTool(tool, term) {
   return 0;
 }
 
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatDateTime(dateStr) {
+  try {
+    return new Date(dateStr).toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  } catch {
+    return dateStr || "";
+  }
+}
+
+function updateLibraryModeIndicator() {
+  const title = document.getElementById("modeIndicatorTitle");
+  const email = document.getElementById("modeIndicatorEmail");
+  if (!title || !email) return;
+
+  if (currentUser) {
+    title.textContent = "Account Mode";
+    email.textContent = currentUser.email || "";
+    email.classList.remove("hidden");
+  } else {
+    title.textContent = "Guest Mode";
+    email.textContent = "";
+    email.classList.add("hidden");
+  }
+}
+
+function maybePromptGuestImport(force = false) {
+  if (!currentUser) return;
+  if (!hasGuestLibraryData()) return;
+  if (!force && localStorage.getItem(KEYS.guestImportDismissed) === "1") return;
+  openModalById("guestImportPromptModal");
+}
+
 /* ---------------- supabase public data ---------------- */
 
 async function fetchPublicCategories() {
@@ -588,6 +901,21 @@ async function fetchPublicTools() {
   if (error) {
     console.error(error);
     showToast("Could not load public tools", "error");
+    return [];
+  }
+
+  return data || [];
+}
+
+async function fetchFeedbackMessages() {
+  const { data, error } = await supabaseClient
+    .from("feedback_messages")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    showToast("Could not load feedback messages", "error");
     return [];
   }
 
@@ -865,10 +1193,6 @@ async function importGuestLibraryToAccount() {
     await refreshLibraryAuthUI();
     await renderLibrary();
 
-    if (importBtn) {
-      importBtn.classList.add("hidden");
-    }
-
     if (!result.addedCategories && !result.addedTools) {
       showToast("Nothing new to import. Your account already has this guest data.", "info");
     } else {
@@ -1037,7 +1361,6 @@ async function renderHome() {
   const searchTerm = (document.getElementById("publicSearch")?.value || "").trim().toLowerCase();
   const isSearching = searchTerm.length > 0;
 
-  const adminPanel = document.getElementById("adminPanelSection");
   const favoritesSection = document.getElementById("publicFavoritesSection");
   const favoritesGrid = document.getElementById("publicFavoritesGrid");
   const categoriesSection = document.getElementById("publicCategoriesSection");
@@ -1048,7 +1371,6 @@ async function renderHome() {
   const stats = document.getElementById("publicStats");
   const publicToolCategory = document.getElementById("publicToolCategory");
 
-  if (adminPanel) adminPanel.classList.toggle("hidden", !isAdmin);
   updateSelectOptions(publicToolCategory, categories);
 
   favoritesGrid.innerHTML = "";
@@ -1201,6 +1523,99 @@ async function renderHome() {
   });
 }
 
+async function loadAdminFeedback() {
+  if (!isAdmin) return;
+
+  const list = document.getElementById("adminFeedbackList");
+  const filter = document.getElementById("adminFeedbackFilter")?.value || "All";
+  if (!list) return;
+
+  list.innerHTML = "";
+
+  const messages = await fetchFeedbackMessages();
+  const filtered = filter === "All"
+    ? messages
+    : messages.filter(item => item.type === filter);
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state"><strong>No feedback messages found.</strong></div>`;
+    return;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "feedback-list";
+
+  filtered.forEach(item => {
+    const card = document.createElement("div");
+    card.className = "feedback-card";
+
+    const meta = document.createElement("div");
+    meta.className = "feedback-meta";
+
+    const type = document.createElement("span");
+    type.className = "feedback-type-badge";
+    type.textContent = item.type || "Unknown";
+
+    const name = document.createElement("div");
+    name.innerHTML = `<strong>Name:</strong> ${escapeHtml(item.name || "Not provided")}`;
+
+    const email = document.createElement("div");
+    email.innerHTML = `<strong>Email:</strong> ${escapeHtml(item.email || "Not provided")}`;
+
+    const time = document.createElement("div");
+    time.innerHTML = `<strong>Received:</strong> ${escapeHtml(formatDateTime(item.created_at))}`;
+
+    meta.append(type, name, email, time);
+
+    const toolLinkValue = item.tool_link || "";
+    let toolLinkEl = null;
+    if (toolLinkValue) {
+      toolLinkEl = document.createElement("a");
+      toolLinkEl.className = "feedback-tool-link";
+      toolLinkEl.href = sanitizeUrl(toolLinkValue);
+      toolLinkEl.target = "_blank";
+      toolLinkEl.rel = "noopener noreferrer";
+      toolLinkEl.textContent = toolLinkValue;
+    }
+
+    const message = document.createElement("div");
+    message.className = "feedback-message";
+    message.innerHTML = `<strong>Message:</strong>\n${escapeHtml(item.message || "No message provided")}`;
+
+    const actions = document.createElement("div");
+    actions.className = "modal-actions left";
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn btn-danger";
+    delBtn.textContent = "Delete";
+
+    delBtn.addEventListener("click", () => {
+      showConfirm("Delete this message?", "Are you sure you want to delete this message?", async () => {
+        const { error } = await supabaseClient.from("feedback_messages").delete().eq("id", item.id);
+        if (error) return showToast("Could not delete message.", "error");
+        await loadAdminFeedback();
+        showToast("Message deleted.", "success");
+      });
+    });
+
+    actions.appendChild(delBtn);
+
+    card.appendChild(meta);
+    if (toolLinkEl) {
+      const label = document.createElement("div");
+      label.innerHTML = `<strong>Tool Link:</strong>`;
+      label.style.marginBottom = "6px";
+      card.appendChild(label);
+      card.appendChild(toolLinkEl);
+    }
+    card.appendChild(message);
+    card.appendChild(actions);
+    wrap.appendChild(card);
+  });
+
+  list.appendChild(wrap);
+}
+
 /* ---------------- library page ---------------- */
 
 async function initLibraryPage() {
@@ -1216,6 +1631,8 @@ async function initLibraryPage() {
   const importGuestBtn = document.getElementById("importGuestDataBtn");
   const privateToolUrl = document.getElementById("privateToolUrl");
   const privateToolName = document.getElementById("privateToolName");
+
+  handleResetModeIfNeeded();
 
   await refreshLibraryAuthUI();
   await renderLibrary();
@@ -1334,18 +1751,26 @@ async function initLibraryPage() {
   });
 }
 
+function handleResetModeIfNeeded() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("reset") === "1") {
+    openModalById("accountModal");
+    showAccountView("reset");
+  }
+}
+
 async function refreshLibraryAuthUI() {
-  const guestAuthWrap = document.getElementById("guestAuthWrap");
-  const accountWrap = document.getElementById("accountWrap");
   const libraryModeText = document.getElementById("libraryModeText");
   const accountEmailText = document.getElementById("accountEmailText");
   const importGuestBtn = document.getElementById("importGuestDataBtn");
+  const guestImportNote = document.getElementById("guestImportNote");
+  const deleteAccountSection = document.getElementById("deleteAccountSection");
 
   if (!libraryModeText) return;
 
+  updateLibraryModeIndicator();
+
   if (currentUser) {
-    guestAuthWrap?.classList.add("hidden");
-    accountWrap?.classList.remove("hidden");
     libraryModeText.textContent = "You are logged in. Your library now syncs across your devices.";
     if (accountEmailText) accountEmailText.textContent = `Logged in as ${currentUser.email || "user"}`;
 
@@ -1354,9 +1779,18 @@ async function refreshLibraryAuthUI() {
       importGuestBtn.disabled = false;
       importGuestBtn.textContent = "Import Guest Library";
     }
+
+    if (guestImportNote) {
+      const dismissed = localStorage.getItem(KEYS.guestImportDismissed) === "1";
+      guestImportNote.classList.toggle("hidden", !(dismissed && hasGuestLibraryData()));
+    }
+
+    if (deleteAccountSection) {
+      deleteAccountSection.classList.toggle("hidden", !deleteAccountSupported);
+    }
+
+    showAccountView("active");
   } else {
-    guestAuthWrap?.classList.remove("hidden");
-    accountWrap?.classList.add("hidden");
     libraryModeText.textContent = "You are using guest mode. Your library is saved only on this device.";
 
     if (importGuestBtn) {
@@ -1364,6 +1798,13 @@ async function refreshLibraryAuthUI() {
       importGuestBtn.disabled = false;
       importGuestBtn.textContent = "Import Guest Library";
     }
+
+    if (guestImportNote) guestImportNote.classList.add("hidden");
+    if (deleteAccountSection) deleteAccountSection.classList.add("hidden");
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reset") === "1") showAccountView("reset");
+    else showAccountView("signup");
   }
 }
 
@@ -1732,9 +2173,11 @@ function setupFeedbackModal() {
   const cancelBtn = document.getElementById("feedbackCancelBtn");
   const submitBtn = document.getElementById("feedbackSubmitBtn");
   const backdrop = feedbackModal.querySelector("[data-close-feedback-modal]");
+  const typeSelect = document.getElementById("feedbackType");
 
   function openFeedbackModal() {
     feedbackModal.classList.remove("hidden");
+    updateFeedbackTypeUI();
   }
 
   function closeFeedbackModal() {
@@ -1748,27 +2191,43 @@ function setupFeedbackModal() {
 
   cancelBtn?.addEventListener("click", closeFeedbackModal);
   backdrop?.addEventListener("click", closeFeedbackModal);
+  typeSelect?.addEventListener("change", updateFeedbackTypeUI);
 
   submitBtn?.addEventListener("click", async () => {
     const name = document.getElementById("feedbackName")?.value.trim() || "";
     const email = document.getElementById("feedbackEmail")?.value.trim() || "";
     const type = document.getElementById("feedbackType")?.value || "Send Feedback";
+    const toolLink = document.getElementById("feedbackToolLink")?.value.trim() || "";
     const message = document.getElementById("feedbackMessage")?.value.trim() || "";
 
-    if (!message) {
-      return showToast("Please write a message first!", "error");
+    const isSuggestTool = type === "Suggest a Tool";
+
+    if (isSuggestTool) {
+      if (!toolLink) {
+        return showToast("Tool link is required for Suggest a Tool.", "error");
+      }
+      if (!isValidUrl(toolLink)) {
+        return showToast("Please enter a valid tool link.", "error");
+      }
+    } else {
+      if (!message) {
+        return showToast("Please write a message first!", "error");
+      }
     }
 
     if (!supabaseClient) {
       return showToast("Feedback service unavailable right now.", "error");
     }
 
-    const { error } = await supabaseClient.from("feedback_messages").insert({
+    const payload = {
       name,
       email,
       type,
-      message
-    });
+      message,
+      tool_link: isSuggestTool ? sanitizeUrl(toolLink) : null
+    };
+
+    const { error } = await supabaseClient.from("feedback_messages").insert(payload);
 
     if (error) {
       console.error(error);
@@ -1780,14 +2239,32 @@ function setupFeedbackModal() {
   });
 }
 
+function updateFeedbackTypeUI() {
+  const type = document.getElementById("feedbackType")?.value || "Suggest a Tool";
+  const toolWrap = document.getElementById("feedbackToolLinkWrap");
+  const message = document.getElementById("feedbackMessage");
+
+  const isSuggest = type === "Suggest a Tool";
+  toolWrap?.classList.toggle("hidden", !isSuggest);
+
+  if (message) {
+    message.placeholder = isSuggest
+      ? "Optional message..."
+      : "Write your message...";
+  }
+}
+
 function clearFeedbackForm() {
   const name = document.getElementById("feedbackName");
   const email = document.getElementById("feedbackEmail");
   const type = document.getElementById("feedbackType");
+  const toolLink = document.getElementById("feedbackToolLink");
   const message = document.getElementById("feedbackMessage");
 
   if (name) name.value = "";
   if (email) email.value = "";
   if (type) type.value = "Suggest a Tool";
+  if (toolLink) toolLink.value = "";
   if (message) message.value = "";
+  updateFeedbackTypeUI();
 }
