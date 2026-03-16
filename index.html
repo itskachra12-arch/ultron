@@ -14,7 +14,6 @@
         <a href="index.html" class="nav-link active">🌍 Explore</a>
         <a href="library.html" class="nav-link">📚 My Library</a>
         <button id="feedbackOpenBtn" class="nav-link nav-button">✉️ Contact / Feedback</button>
-        <button id="adminToggleBtn" class="nav-admin-btn">🔒 Admin</button>
       </nav>
     </div>
   </header>
@@ -36,51 +35,6 @@
       </div>
 
       <div id="publicStats" class="stats-line"></div>
-    </section>
-
-    <section id="adminPanelSection" class="panel admin-panel hidden">
-      <div class="panel-header">
-        <div>
-          <h2>Admin Panel</h2>
-          <p class="panel-note">Manage the public curated directory</p>
-        </div>
-        <span class="admin-badge">Admin Mode Active</span>
-      </div>
-
-      <div class="admin-grid">
-        <div class="subpanel">
-          <h3>Create Category</h3>
-          <div class="form-grid">
-            <input id="publicCategoryName" type="text" class="input" placeholder="Category name" autocomplete="off" />
-            <input id="publicCategoryDesc" type="text" class="input" placeholder="Category description" autocomplete="off" />
-            <button id="createPublicCategoryBtn" class="btn btn-primary">Create Category</button>
-          </div>
-        </div>
-
-        <div class="subpanel">
-          <h3>Add Tool</h3>
-          <div class="form-grid">
-            <input id="publicToolName" type="text" class="input" placeholder="Tool name" autocomplete="off" />
-            <input id="publicToolUrl" type="url" class="input" placeholder="https://example.com" autocomplete="off" />
-            <select id="publicToolCategory" class="input select"></select>
-            <label class="check-row">
-              <input id="publicToolFav" type="checkbox" />
-              <span>Featured / Favorite</span>
-            </label>
-            <button id="addPublicToolBtn" class="btn btn-primary">Add Tool</button>
-          </div>
-        </div>
-
-        <div class="subpanel">
-          <h3>Backup &amp; Restore</h3>
-          <div class="inline-actions wrap">
-            <button id="exportAllBtn" class="btn">💾 Export All Data</button>
-            <button id="importAllBtn" class="btn">📂 Import All Data</button>
-            <input id="importAllInput" type="file" accept=".json,application/json" hidden />
-          </div>
-          <p class="muted">Exports public + private data together as a full backup.</p>
-        </div>
-      </div>
     </section>
 
     <section id="publicFavoritesSection" class="section hidden">
@@ -132,17 +86,115 @@
     </div>
   </div>
 
-  <div id="adminModal" class="modal hidden">
-    <div class="modal-backdrop" data-close-admin-modal></div>
+  <div id="adminLoginModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-admin-login-modal></div>
     <div class="modal-card">
       <h3>Admin Access</h3>
       <p>Log in with your admin account to manage the public directory.</p>
+
+      <div id="adminLoginMessage" class="status-message hidden"></div>
+
       <div class="form-grid">
         <input id="adminEmailInput" type="email" class="input" placeholder="Admin email" autocomplete="email" />
-        <input id="adminPasswordInput" type="password" class="input" placeholder="Admin password" autocomplete="current-password" />
+
+        <div class="password-wrap">
+          <input id="adminPasswordInput" type="password" class="input password-input" placeholder="Admin password" autocomplete="current-password" />
+          <button id="toggleAdminPasswordBtn" type="button" class="password-toggle-btn">👁</button>
+        </div>
+
+        <button id="adminLoginBtn" class="btn btn-primary">Login</button>
+        <button id="adminForgotPasswordBtn" class="btn btn-ghost">Forgot Password?</button>
+
+        <div id="adminForgotWrap" class="subtle-box hidden">
+          <div class="form-grid">
+            <input id="adminForgotEmailInput" type="email" class="input" placeholder="Admin email" autocomplete="email" />
+            <button id="adminSendResetBtn" class="btn btn-primary">Send Reset Email</button>
+          </div>
+        </div>
+
         <div class="modal-actions left">
           <button id="adminCancelBtn" class="btn">Cancel</button>
-          <button id="adminLoginBtn" class="btn btn-primary">Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminPanelModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-admin-panel-modal></div>
+    <div class="modal-card modal-card-admin">
+      <div class="admin-modal-top">
+        <div>
+          <h3>Admin Panel</h3>
+          <p class="muted">Manage the public curated directory</p>
+        </div>
+        <div class="inline-actions wrap">
+          <span class="admin-badge">Admin Mode Active</span>
+          <button id="adminLogoutBtn" class="btn">Log Out</button>
+          <button id="adminPanelCloseBtn" class="btn">Close</button>
+        </div>
+      </div>
+
+      <div class="admin-tabs">
+        <button id="adminTabFeedback" class="admin-tab active" data-admin-tab="feedback">Feedback</button>
+        <button id="adminTabTools" class="admin-tab" data-admin-tab="tools">Tools</button>
+        <button id="adminTabCategories" class="admin-tab" data-admin-tab="categories">Categories</button>
+        <button id="adminTabBackup" class="admin-tab" data-admin-tab="backup">Backup</button>
+      </div>
+
+      <div id="adminTabPanelFeedback" class="admin-tab-panel">
+        <div class="subpanel">
+          <div class="panel-header">
+            <div>
+              <h3>Feedback Messages</h3>
+              <p class="panel-note">Newest first</p>
+            </div>
+            <select id="adminFeedbackFilter" class="input select admin-filter">
+              <option value="All">All</option>
+              <option value="Suggest a Tool">Suggest a Tool</option>
+              <option value="Send Feedback">Send Feedback</option>
+              <option value="Report an Issue">Report an Issue</option>
+            </select>
+          </div>
+          <div id="adminFeedbackList"></div>
+        </div>
+      </div>
+
+      <div id="adminTabPanelTools" class="admin-tab-panel hidden">
+        <div class="subpanel">
+          <h3>Add Tool</h3>
+          <div class="form-grid">
+            <input id="publicToolName" type="text" class="input" placeholder="Tool name" autocomplete="off" />
+            <input id="publicToolUrl" type="url" class="input" placeholder="https://example.com" autocomplete="off" />
+            <select id="publicToolCategory" class="input select"></select>
+            <label class="check-row">
+              <input id="publicToolFav" type="checkbox" />
+              <span>Featured / Favorite</span>
+            </label>
+            <button id="addPublicToolBtn" class="btn btn-primary">Add Tool</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="adminTabPanelCategories" class="admin-tab-panel hidden">
+        <div class="subpanel">
+          <h3>Create Category</h3>
+          <div class="form-grid">
+            <input id="publicCategoryName" type="text" class="input" placeholder="Category name" autocomplete="off" />
+            <input id="publicCategoryDesc" type="text" class="input" placeholder="Category description" autocomplete="off" />
+            <button id="createPublicCategoryBtn" class="btn btn-primary">Create Category</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="adminTabPanelBackup" class="admin-tab-panel hidden">
+        <div class="subpanel">
+          <h3>Backup &amp; Restore</h3>
+          <div class="inline-actions wrap">
+            <button id="exportAllBtn" class="btn">💾 Export All Data</button>
+            <button id="importAllBtn" class="btn">📂 Import All Data</button>
+            <input id="importAllInput" type="file" accept=".json,application/json" hidden />
+          </div>
+          <p class="muted">Exports public + guest local data together as a full backup on this device.</p>
         </div>
       </div>
     </div>
@@ -175,15 +227,23 @@
       <h3>✉️ Contact / Feedback</h3>
       <p>Got a suggestion, tool recommendation, feedback, or issue? Send it here.</p>
       <p class="muted">You can also email directly at <a href="mailto:itskachra12@gmail.com">itskachra12@gmail.com</a></p>
+
       <div class="form-grid">
         <input id="feedbackName" type="text" class="input" placeholder="Your name (optional)" autocomplete="name" />
         <input id="feedbackEmail" type="email" class="input" placeholder="Your email (optional)" autocomplete="email" />
+
         <select id="feedbackType" class="input select">
           <option value="Suggest a Tool">Suggest a Tool</option>
           <option value="Send Feedback">Send Feedback</option>
           <option value="Report an Issue">Report an Issue</option>
         </select>
+
+        <div id="feedbackToolLinkWrap" class="hidden">
+          <input id="feedbackToolLink" type="url" class="input" placeholder="Tool link (required for Suggest a Tool)" autocomplete="off" />
+        </div>
+
         <textarea id="feedbackMessage" class="input textarea" placeholder="Write your message..." rows="5" autocomplete="off"></textarea>
+
         <div class="modal-actions left">
           <button id="feedbackCancelBtn" class="btn">Cancel</button>
           <button id="feedbackSubmitBtn" class="btn btn-primary">Send</button>
