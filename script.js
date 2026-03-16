@@ -808,9 +808,10 @@ async function importGuestLibraryToAccount() {
       importBtn.textContent = "Importing...";
     }
 
-    const error = await replaceCloudLibrary(guestData);
-    if (error) {
-      console.error(error);
+    const result = await mergeGuestLibraryIntoAccount(guestData);
+
+    if (result.error) {
+      console.error(result.error);
       showToast("Could not import guest library.", "error");
       return;
     }
@@ -821,7 +822,14 @@ async function importGuestLibraryToAccount() {
       importBtn.classList.add("hidden");
     }
 
-    showToast("Guest library imported into your account!", "success");
+    if (!result.addedCategories && !result.addedTools) {
+      showToast("Nothing new to import. Your account already has this guest data.", "info");
+    } else {
+      showToast(
+        `Guest library imported! Added ${result.addedCategories} categories and ${result.addedTools} links.`,
+        "success"
+      );
+    }
   } finally {
     isImportingGuestLibrary = false;
 
