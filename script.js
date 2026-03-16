@@ -675,6 +675,86 @@ async function toggleCloudFavorite(id, nextFav) {
 }
 
 async function replaceCloudLibrary(data) {
+  async function mergeGuestLibraryIntoAccount(data) {
+  if (!currentUser) return { error: new Error("No logged-in user") };
+
+  const existingCategories = await fetchCloudCategories();
+  const existingTools = await fetchCloudTools();
+
+  const existingCategoryNames = new Set(
+    existingCategories.map(cat => (cat.name || "").trim().toLowerCase())
+  );
+
+  const existingToolKeys = new Set(
+    existingTools.map(tool =>
+      `${(tool.name || "").trim().toLowerCase()}|${sanitizeUrl(tool.link || "").toLowerCase()}|${(tool.cat || "").trim().toLowerCase()}`
+    )
+  );
+
+  const categoriesToInsert = [];
+  const toolsToInsert = [];
+
+  for (const cat of data.privateCategories || []) {
+    const name = (cat.name || "").trim();
+    if (!name) continue;
+
+    const key = name.toLowerCase();
+    if (!existingCategoryNames.has(key)) {
+      existingCategoryNames.add(key);
+      categoriesToInsert.push({
+        user_id: currentUser.id,
+        name
+      });
+    }
+  }
+
+  for (const tool of data.privateTools || []) {
+    const name = (tool.name || "").trim();
+    const link = sanitizeUrl((tool.link || "").trim());
+    const cat = (tool.cat || "").trim();
+
+    if (!name || !link || !cat) continue;
+
+    const toolKey = `${name.toLowerCase()}|${link.toLowerCase()}|${cat.toLowerCase()}`;
+
+    if (!existingToolKeys.has(toolKey)) {
+      existingToolKeys.add(toolKey);
+
+      toolsToInsert.push({
+        id: generateId(),
+        user_id: currentUser.id,
+        name,
+        link,
+        cat,
+        fav: !!tool.fav
+      });
+
+      if (!existingCategoryNames.has(cat.toLowerCase())) {
+        existingCategoryNames.add(cat.toLowerCase());
+        categoriesToInsert.push({
+          user_id: currentUser.id,
+          name: cat
+        });
+      }
+    }
+  }
+
+  if (categoriesToInsert.length) {
+    const { error } = await supabaseClient.from("private_categories").insert(categoriesToInsert);
+    if (error) return { error };
+  }
+
+  if (toolsToInsert.length) {
+    const { error } = await supabaseClient.from("private_tools").insert(toolsToInsert);
+    if (error) return { error };
+  }
+
+  return {
+    error: null,
+    addedCategories: categoriesToInsert.length,
+    addedTools: toolsToInsert.length
+  };
+}
   await supabaseClient.from("private_tools").delete().eq("user_id", currentUser.id);
   await supabaseClient.from("private_categories").delete().eq("user_id", currentUser.id);
 
