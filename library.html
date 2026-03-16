@@ -29,11 +29,15 @@
       </div>
 
       <div class="library-top-actions">
+        <div class="library-mode-wrap">
+          <button id="libraryModeBtn" class="mode-indicator-btn" type="button">
+            <span id="modeIndicatorTitle" class="mode-indicator-title">Guest Mode</span>
+            <span id="modeIndicatorEmail" class="mode-indicator-email hidden"></span>
+          </button>
+        </div>
+
         <div class="library-top-actions-center">
           <button id="openQuickAddModalBtn" class="btn">➕ Quick Add</button>
-        </div>
-        <div class="library-top-actions-right">
-          <button id="openAccountModalBtn" class="btn btn-primary">👤 Account & Sync</button>
         </div>
       </div>
 
@@ -107,10 +111,12 @@
   <div id="accountModal" class="modal hidden">
     <div class="modal-backdrop" data-close-account-modal></div>
     <div class="modal-card modal-card-wide">
-      <h3>Account & Sync</h3>
+      <h3>Account &amp; Sync</h3>
       <p id="libraryModeText">You are using guest mode. Your library is saved only on this device.</p>
 
-      <div id="guestAuthWrap" class="admin-grid">
+      <div id="accountGuestView">
+        <div id="authSuccessMessage" class="status-message hidden"></div>
+
         <div class="subpanel">
           <h3>Create Account</h3>
           <div class="form-grid">
@@ -119,9 +125,14 @@
               <input id="userSignupPassword" type="password" class="input password-input" placeholder="Password" autocomplete="new-password" />
               <button id="toggleSignupPasswordBtn" type="button" class="password-toggle-btn">👁</button>
             </div>
-            <button id="userSignupBtn" class="btn btn-primary">Sign Up</button>
+            <button id="userSignupBtn" class="btn btn-primary">Create Account</button>
+            <button id="switchToLoginBtn" class="btn btn-ghost" type="button">Already have an account? Log in</button>
           </div>
         </div>
+      </div>
+
+      <div id="accountLoginView" class="hidden">
+        <div id="loginMessageBox" class="status-message hidden"></div>
 
         <div class="subpanel">
           <h3>Log In</h3>
@@ -132,6 +143,40 @@
               <button id="toggleLoginPasswordBtn" type="button" class="password-toggle-btn">👁</button>
             </div>
             <button id="userLoginBtn" class="btn btn-primary">Log In</button>
+            <button id="openForgotPasswordBtn" class="btn btn-ghost" type="button">Forgot Password?</button>
+            <button id="switchToSignupBtn" class="btn btn-ghost" type="button">Don’t have an account? Create one</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="forgotPasswordView" class="hidden">
+        <div id="forgotPasswordMessage" class="status-message hidden"></div>
+
+        <div class="subpanel">
+          <h3>Reset Password</h3>
+          <div class="form-grid">
+            <input id="forgotPasswordEmail" type="email" class="input" placeholder="Email address" autocomplete="email" />
+            <button id="sendForgotPasswordBtn" class="btn btn-primary" type="button">Send Reset Email</button>
+            <button id="backToLoginBtn" class="btn btn-ghost" type="button">Back to Log In</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="resetPasswordView" class="hidden">
+        <div id="resetPasswordMessage" class="status-message hidden"></div>
+
+        <div class="subpanel">
+          <h3>Set New Password</h3>
+          <div class="form-grid">
+            <div class="password-wrap">
+              <input id="resetNewPassword" type="password" class="input password-input" placeholder="New Password" autocomplete="new-password" />
+              <button id="toggleResetPasswordBtn" type="button" class="password-toggle-btn">👁</button>
+            </div>
+            <div class="password-wrap">
+              <input id="resetConfirmPassword" type="password" class="input password-input" placeholder="Confirm New Password" autocomplete="new-password" />
+              <button id="toggleResetConfirmPasswordBtn" type="button" class="password-toggle-btn">👁</button>
+            </div>
+            <button id="saveNewPasswordBtn" class="btn btn-primary" type="button">Save New Password</button>
           </div>
         </div>
       </div>
@@ -139,14 +184,62 @@
       <div id="accountWrap" class="subpanel hidden">
         <h3>Account Active</h3>
         <p id="accountEmailText" class="muted">Logged in</p>
+        <p id="guestImportNote" class="muted hidden">Guest data is still available on this device. You can import it manually anytime.</p>
+
         <div class="inline-actions wrap">
-          <button id="importGuestDataBtn" class="btn">Import Guest Library</button>
+          <button id="importGuestDataBtn" class="btn hidden">Import Guest Library</button>
           <button id="userLogoutBtn" class="btn btn-primary">Log Out</button>
+        </div>
+
+        <div id="deleteAccountSection" class="danger-zone hidden">
+          <h4>Danger Zone</h4>
+          <p class="muted">This permanently deletes your account and cloud library. Guest/local data on this device stays untouched.</p>
+          <button id="openDeleteAccountBtn" class="btn btn-danger" type="button">Delete Account</button>
         </div>
       </div>
 
       <div class="modal-actions left">
         <button id="closeAccountModalBtn" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="deleteAccountModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-delete-account-modal></div>
+    <div class="modal-card">
+      <h3>Delete Account</h3>
+      <p>This will permanently delete your account and cloud library. Guest/local data on this device will stay untouched.</p>
+
+      <div id="deleteAccountStep1">
+        <div class="modal-actions left">
+          <button id="deleteAccountCancelBtn" class="btn">Cancel</button>
+          <button id="deleteAccountContinueBtn" class="btn btn-danger">Continue</button>
+        </div>
+      </div>
+
+      <div id="deleteAccountStep2" class="hidden">
+        <div id="deleteAccountMessage" class="status-message hidden"></div>
+        <div class="form-grid">
+          <div class="password-wrap">
+            <input id="deleteAccountPassword" type="password" class="input password-input" placeholder="Re-enter password" autocomplete="current-password" />
+            <button id="toggleDeletePasswordBtn" type="button" class="password-toggle-btn">👁</button>
+          </div>
+          <button id="confirmDeleteAccountBtn" class="btn btn-danger">Delete My Account</button>
+          <button id="deleteAccountForgotPasswordBtn" class="btn btn-ghost" type="button">Forgot Password?</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="guestImportPromptModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <h3>Import Guest Library?</h3>
+      <p>We found links saved on this device in Guest Mode. Do you want to import them into your account?</p>
+      <div class="modal-actions wrap left">
+        <button id="guestImportNowBtn" class="btn btn-primary">Import Now</button>
+        <button id="guestImportNotNowBtn" class="btn">Not Now</button>
+        <button id="guestImportDontAskBtn" class="btn">Don’t Ask Again</button>
       </div>
     </div>
   </div>
@@ -196,12 +289,19 @@
       <div class="form-grid">
         <input id="feedbackName" type="text" class="input" placeholder="Your name (optional)" autocomplete="name" />
         <input id="feedbackEmail" type="email" class="input" placeholder="Your email (optional)" autocomplete="email" />
+
         <select id="feedbackType" class="input select">
           <option value="Suggest a Tool">Suggest a Tool</option>
           <option value="Send Feedback">Send Feedback</option>
           <option value="Report an Issue">Report an Issue</option>
         </select>
+
+        <div id="feedbackToolLinkWrap" class="hidden">
+          <input id="feedbackToolLink" type="url" class="input" placeholder="Tool link (required for Suggest a Tool)" autocomplete="off" />
+        </div>
+
         <textarea id="feedbackMessage" class="input textarea" placeholder="Write your message..." rows="5" autocomplete="off"></textarea>
+
         <div class="modal-actions left">
           <button id="feedbackCancelBtn" class="btn">Cancel</button>
           <button id="feedbackSubmitBtn" class="btn btn-primary">Send</button>
