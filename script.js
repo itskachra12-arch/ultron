@@ -34,13 +34,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       isAdmin = currentUser?.id === ADMIN_USER_ID;
 
       updateLibraryModeIndicator();
-      updateAdminUI();
 
       const page = document.body.dataset.page;
 
       if (page === "home") {
         if (isAdmin) {
           await loadAdminFeedback();
+        } else {
+          closeModalById("adminPanelModal");
+          closeAdminLoginModal();
         }
         await renderHome();
       }
@@ -61,7 +63,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   updateLibraryModeIndicator();
-  updateAdminUI();
 
   const page = document.body.dataset.page;
   if (page === "home") await initHomePage();
@@ -97,7 +98,6 @@ async function handleAdminLogin() {
   closeAdminLoginModal();
   openModalById("adminPanelModal");
   switchAdminTab("feedback");
-  updateAdminUI();
   await loadAdminFeedback();
   await renderHome();
   showToast("Logged in as admin!", "success");
@@ -109,7 +109,6 @@ async function handleAdminLogout() {
 
   currentUser = null;
   isAdmin = false;
-  updateAdminUI();
   closeModalById("adminPanelModal");
   await renderHome();
   showToast("Logged out", "info");
@@ -261,13 +260,6 @@ async function handleResetPasswordSave() {
   setTimeout(() => {
     showAccountView("login");
   }, 900);
-}
-
-function updateAdminUI() {
-  if (!document.body || document.body.dataset.page !== "home") return;
-  if (!isAdmin) {
-    closeModalById("adminPanelModal");
-  }
 }
 
 function closeAdminLoginModal() {
@@ -908,6 +900,8 @@ async function fetchPublicTools() {
 }
 
 async function fetchFeedbackMessages() {
+  if (!isAdmin) return [];
+
   const { data, error } = await supabaseClient
     .from("feedback_messages")
     .select("*")
@@ -2033,6 +2027,7 @@ function createLinkCard(tool, type, showCategory = false) {
     e.stopPropagation();
     showConfirm("Delete this tool?", "This action cannot be undone.", async () => {
       if (type === "public") {
+        if (!isAdmin) return showToast("Admin only.", "error");
         const { error } = await supabaseClient.from("public_tools").delete().eq("id", tool.id);
         if (error) return showToast("Could not delete tool", "error");
         await renderHome();
@@ -2093,6 +2088,7 @@ function createLinkCard(tool, type, showCategory = false) {
       e.stopPropagation();
 
       if (type === "public") {
+        if (!isAdmin) return showToast("Admin only.", "error");
         const { error } = await supabaseClient
           .from("public_tools")
           .update({ fav: !tool.fav })
