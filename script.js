@@ -16,20 +16,22 @@ const KEYS = {
 const APP_BASE_URL = "https://itskachra12-arch.github.io/ultron/";
 const RESET_REDIRECT_URL = APP_BASE_URL + "library.html?reset=1";
 
+let currentUser = null;
 let isAdmin = false;
 let confirmCallback = null;
 let editingPublicToolId = null;
-let currentUser = null;
 let isImportingGuestLibrary = false;
-let currentAdminTab = "feedback";
 let deleteAccountSupported = false;
-let adminFeedbackCache = [];
 
 document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
   setupSharedUI();
 
   if (supabaseClient) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    currentUser = session?.user || null;
+    isAdmin = currentUser?.id === ADMIN_USER_ID;
+
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       currentUser = session?.user || null;
       isAdmin = currentUser?.id === ADMIN_USER_ID;
@@ -42,10 +44,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!isAdmin) {
           closeModalById("adminPanelModal");
           closeAdminLoginModal();
-        } else if (!document.getElementById("adminPanelModal")?.classList.contains("hidden")) {
-          await loadAdminFeedback(true);
         }
-
         await renderHome();
       }
 
@@ -54,10 +53,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         await renderLibrary();
       }
     });
-
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    currentUser = session?.user || null;
-    isAdmin = currentUser?.id === ADMIN_USER_ID;
   }
 
   updateLibraryModeIndicator();
@@ -96,28 +91,36 @@ async function handleAdminLogin() {
 
   closeAdminLoginModal();
   openModalById("adminPanelModal");
-  switchAdminTab("feedback");
-  await loadAdminFeedback(true);
+  setAdminTab("feedback");
+  await loadAdminFeedback();
   await renderHome();
 
   showToast("Logged in as admin!", "success");
 }
 
 async function handleAdminLogout() {
-  showConfirm("Log Out", "Are you sure you want to log out?", async () => {
+  try {
     const { error } = await supabaseClient.auth.signOut();
-    if (error) return showToast("Logout failed", "error");
+    if (error) {
+      console.error(error);
+      return showToast("Logout failed", "error");
+    }
 
     currentUser = null;
     isAdmin = false;
-    adminFeedbackCache = [];
 
     closeModalById("adminPanelModal");
     closeAdminLoginModal();
 
+    const feedbackList = document.getElementById("adminFeedbackList");
+    if (feedbackList) feedbackList.innerHTML = "";
+
     await renderHome();
     showToast("Logged out", "info");
-  }, "Log Out");
+  } catch (err) {
+    console.error(err);
+    showToast("Logout failed", "error");
+  }
 }
 
 async function handleUserSignup() {
@@ -167,7 +170,6 @@ async function handleUserLogin() {
   const guestHasData = hasGuestLibraryData();
 
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-
   if (error) return showToast("Login failed: " + error.message, "error");
 
   currentUser = data?.user || null;
@@ -364,25 +366,23 @@ function setupAdminModal() {
   const adminForgotPasswordBtn = document.getElementById("adminForgotPasswordBtn");
   const adminSendResetBtn = document.getElementById("adminSendResetBtn");
 
-  function openAdminEntry() {
+  window.openAdminEntry = async function () {
     if (isAdmin && currentUser?.id === ADMIN_USER_ID) {
       openModalById("adminPanelModal");
-      switchAdminTab("feedback");
-      loadAdminFeedback(true);
+      setAdminTab("feedback");
+      await loadAdminFeedback();
     } else {
       loginModal?.classList.remove("hidden");
       setTimeout(() => document.getElementById("adminEmailInput")?.focus(), 50);
     }
-  }
-
-  window.openAdminEntry = openAdminEntry;
+  };
 
   cancelBtn?.addEventListener("click", closeAdminLoginModal);
   backdrop?.addEventListener("click", closeAdminLoginModal);
   adminPanelBackdrop?.addEventListener("click", () => closeModalById("adminPanelModal"));
   adminPanelCloseBtn?.addEventListener("click", () => closeModalById("adminPanelModal"));
-  adminLogoutBtn?.addEventListener("click", handleAdminLogout);
 
+  adminLogoutBtn?.addEventListener("click", handleAdminLogout);
   loginBtn?.addEventListener("click", handleAdminLogin);
 
   passwordInput?.addEventListener("keydown", (e) => {
@@ -403,19 +403,18 @@ function setupAdminTabs() {
   const buttons = document.querySelectorAll("[data-admin-tab]");
   buttons.forEach(btn => {
     btn.addEventListener("click", async () => {
-      switchAdminTab(btn.dataset.adminTab);
+      setAdminTab(btn.dataset.adminTab);
       if (btn.dataset.adminTab === "feedback") {
-        await loadAdminFeedback(true);
+        await loadAdminFeedback();
       }
     });
   });
 
   const feedbackFilter = document.getElementById("adminFeedbackFilter");
-  feedbackFilter?.addEventListener("change", () => renderAdminFeedbackList());
+  feedbackFilter?.addEventListener("change", renderAdminFeedbackList);
 }
 
-function switchAdminTab(tabName) {
-  currentAdminTab = tabName;
+function setAdminTab(tabName) {
   document.querySelectorAll("[data-admin-tab]").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.adminTab === tabName);
   });
@@ -895,7 +894,7 @@ async function fetchFeedbackMessages() {
   return data || [];
 }
 
-/* ---------------- supabase private data ---------------- */
+/* ---------------- library data ---------------- */
 
 async function fetchCloudCategories() {
   if (!currentUser) return [];
@@ -1104,21 +1103,13 @@ async function mergeGuestLibraryIntoAccount(data) {
   }
 
   if (categoriesToInsert.length) {
-    const { error } = await supabaseClient
-      .from("private_categories")
-      .insert(categoriesToInsert);
-    if (error) {
-      return { error, addedCategories: 0, addedTools: 0 };
-    }
+    const { error } = await supabaseClient.from("private_categories").insert(categoriesToInsert);
+    if (error) return { error, addedCategories: 0, addedTools: 0 };
   }
 
   if (toolsToInsert.length) {
-    const { error } = await supabaseClient
-      .from("private_tools")
-      .insert(toolsToInsert);
-    if (error) {
-      return { error, addedCategories: categoriesToInsert.length, addedTools: 0 };
-    }
+    const { error } = await supabaseClient.from("private_tools").insert(toolsToInsert);
+    if (error) return { error, addedCategories: categoriesToInsert.length, addedTools: 0 };
   }
 
   return {
@@ -1129,11 +1120,7 @@ async function mergeGuestLibraryIntoAccount(data) {
 }
 
 async function importGuestLibraryToAccount() {
-  if (!currentUser) {
-    showToast("Please log in first.", "error");
-    return;
-  }
-
+  if (!currentUser) return showToast("Please log in first.", "error");
   if (isImportingGuestLibrary) return;
 
   const importBtn = document.getElementById("importGuestDataBtn");
@@ -1143,8 +1130,7 @@ async function importGuestLibraryToAccount() {
   };
 
   if (!guestData.privateCategories.length && !guestData.privateTools.length) {
-    showToast("No guest library found to import.", "error");
-    return;
+    return showToast("No guest library found to import.", "error");
   }
 
   try {
@@ -1159,8 +1145,7 @@ async function importGuestLibraryToAccount() {
 
     if (result.error) {
       console.error(result.error);
-      showToast("Could not import guest library.", "error");
-      return;
+      return showToast("Could not import guest library.", "error");
     }
 
     await refreshLibraryAuthUI();
@@ -1169,10 +1154,7 @@ async function importGuestLibraryToAccount() {
     if (!result.addedCategories && !result.addedTools) {
       showToast("Nothing new to import. Your account already has this guest data.", "info");
     } else {
-      showToast(
-        `Guest library imported! Added ${result.addedCategories} categories and ${result.addedTools} links.`,
-        "success"
-      );
+      showToast(`Guest library imported! Added ${result.addedCategories} categories and ${result.addedTools} links.`, "success");
     }
   } catch (err) {
     console.error(err);
@@ -1344,6 +1326,8 @@ async function renderHome() {
   const stats = document.getElementById("publicStats");
   const publicToolCategory = document.getElementById("publicToolCategory");
 
+  if (!favoritesSection || !favoritesGrid || !categoriesSection || !categoriesContainer || !searchSection || !searchResults || !noResults || !stats) return;
+
   updateSelectOptions(publicToolCategory, categories);
 
   favoritesGrid.innerHTML = "";
@@ -1368,7 +1352,7 @@ async function renderHome() {
   const matchingTools = tools
     .filter(tool => {
       if (!searchTerm) return true;
-      return tool.name.toLowerCase().includes(searchTerm) || tool.cat.toLowerCase().includes(searchTerm);
+      return (tool.name || "").toLowerCase().includes(searchTerm) || (tool.cat || "").toLowerCase().includes(searchTerm);
     })
     .sort((a, b) => scoreTool(b, searchTerm) - scoreTool(a, searchTerm));
 
@@ -1496,11 +1480,11 @@ async function renderHome() {
   });
 }
 
-async function loadAdminFeedback(force = false) {
-  if (!isAdmin) return;
-  if (force || !adminFeedbackCache.length) {
-    adminFeedbackCache = await fetchFeedbackMessages();
-  }
+let latestAdminFeedback = [];
+
+async function loadAdminFeedback() {
+  if (!isAdmin || !currentUser || currentUser.id !== ADMIN_USER_ID) return;
+  latestAdminFeedback = await fetchFeedbackMessages();
   renderAdminFeedbackList();
 }
 
@@ -1512,8 +1496,8 @@ function renderAdminFeedbackList() {
   list.innerHTML = "";
 
   const filtered = filter === "All"
-    ? adminFeedbackCache
-    : adminFeedbackCache.filter(item => item.type === filter);
+    ? latestAdminFeedback
+    : latestAdminFeedback.filter(item => item.type === filter);
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><strong>No feedback messages found.</strong></div>`;
@@ -1571,7 +1555,8 @@ function renderAdminFeedbackList() {
       showConfirm("Delete this message?", "Are you sure you want to delete this message?", async () => {
         const { error } = await supabaseClient.from("feedback_messages").delete().eq("id", item.id);
         if (error) return showToast("Could not delete message.", "error");
-        adminFeedbackCache = adminFeedbackCache.filter(msg => msg.id !== item.id);
+
+        latestAdminFeedback = latestAdminFeedback.filter(msg => msg.id !== item.id);
         renderAdminFeedbackList();
         showToast("Message deleted.", "success");
       });
@@ -1818,6 +1803,8 @@ async function renderLibrary() {
   const noResults = document.getElementById("privateNoResults");
   const stats = document.getElementById("libraryStats");
   const privateToolCategory = document.getElementById("privateToolCategory");
+
+  if (!favoritesSection || !favoritesGrid || !categoriesSection || !categoriesContainer || !searchSection || !searchResults || !noResults || !stats) return;
 
   updateSelectOptions(privateToolCategory, categories);
 
