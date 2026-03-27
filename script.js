@@ -23,13 +23,14 @@ let currentUser = null;
 let isImportingGuestLibrary = false;
 let currentAdminTab = "feedback";
 let deleteAccountSupported = false;
+let adminFeedbackCache = [];
 
 document.addEventListener("DOMContentLoaded", async () => {
   seedPrivateDefaults();
   setupSharedUI();
 
   if (supabaseClient) {
-    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       currentUser = session?.user || null;
       isAdmin = currentUser?.id === ADMIN_USER_ID;
 
@@ -38,22 +39,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       const page = document.body.dataset.page;
 
       if (page === "home") {
-        if (isAdmin) {
-          await loadAdminFeedback();
-        } else {
+        if (!isAdmin) {
           closeModalById("adminPanelModal");
           closeAdminLoginModal();
+        } else if (!document.getElementById("adminPanelModal")?.classList.contains("hidden")) {
+          await loadAdminFeedback(true);
         }
+
         await renderHome();
       }
 
       if (page === "library") {
         await refreshLibraryAuthUI();
         await renderLibrary();
-
-        if (event === "SIGNED_IN" && currentUser) {
-          maybePromptGuestImport();
-        }
       }
     });
 
@@ -95,36 +93,39 @@ async function handleAdminLogin() {
 
   currentUser = user;
   isAdmin = true;
+
   closeAdminLoginModal();
   openModalById("adminPanelModal");
   switchAdminTab("feedback");
-  await loadAdminFeedback();
+  await loadAdminFeedback(true);
   await renderHome();
+
   showToast("Logged in as admin!", "success");
 }
 
 async function handleAdminLogout() {
-  const { error } = await supabaseClient.auth.signOut();
-  if (error) return showToast("Logout failed", "error");
+  showConfirm("Log Out", "Are you sure you want to log out?", async () => {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) return showToast("Logout failed", "error");
 
-  currentUser = null;
-  isAdmin = false;
-  closeModalById("adminPanelModal");
-  await renderHome();
-  showToast("Logged out", "info");
+    currentUser = null;
+    isAdmin = false;
+    adminFeedbackCache = [];
+
+    closeModalById("adminPanelModal");
+    closeAdminLoginModal();
+
+    await renderHome();
+    showToast("Logged out", "info");
+  }, "Log Out");
 }
 
 async function handleUserSignup() {
   const email = document.getElementById("userSignupEmail")?.value.trim() || "";
   const password = document.getElementById("userSignupPassword")?.value.trim() || "";
 
-  if (!email || !password) {
-    return showToast("Email and password required!", "error");
-  }
-
-  if (password.length < 6) {
-    return showToast("Password should be at least 6 characters.", "error");
-  }
+  if (!email || !password) return showToast("Email and password required!", "error");
+  if (password.length < 6) return showToast("Password should be at least 6 characters.", "error");
 
   const { data, error } = await supabaseClient.auth.signUp({
     email,
@@ -134,9 +135,7 @@ async function handleUserSignup() {
     }
   });
 
-  if (error) {
-    return showToast(error.message, "error");
-  }
+  if (error) return showToast(error.message, "error");
 
   document.getElementById("userSignupEmail").value = "";
   document.getElementById("userSignupPassword").value = "";
@@ -169,9 +168,7 @@ async function handleUserLogin() {
 
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
-  if (error) {
-    return showToast("Login failed: " + error.message, "error");
-  }
+  if (error) return showToast("Login failed: " + error.message, "error");
 
   currentUser = data?.user || null;
   isAdmin = currentUser?.id === ADMIN_USER_ID;
@@ -205,17 +202,13 @@ async function handleUserLogout() {
 
 async function sendForgotPassword(email, messageTargetId = "forgotPasswordMessage") {
   const cleanEmail = (email || "").trim();
-  if (!cleanEmail) {
-    return showToast("Please enter your email.", "error");
-  }
+  if (!cleanEmail) return showToast("Please enter your email.", "error");
 
   const { error } = await supabaseClient.auth.resetPasswordForEmail(cleanEmail, {
     redirectTo: RESET_REDIRECT_URL
   });
 
-  if (error) {
-    return showToast(error.message, "error");
-  }
+  if (error) return showToast(error.message, "error");
 
   const box = document.getElementById(messageTargetId);
   if (box) {
@@ -231,23 +224,12 @@ async function handleResetPasswordSave() {
   const confirmPassword = document.getElementById("resetConfirmPassword")?.value.trim() || "";
   const box = document.getElementById("resetPasswordMessage");
 
-  if (!newPassword || !confirmPassword) {
-    return showToast("Please fill both password fields.", "error");
-  }
-
-  if (newPassword.length < 6) {
-    return showToast("Password should be at least 6 characters.", "error");
-  }
-
-  if (newPassword !== confirmPassword) {
-    return showToast("Passwords do not match.", "error");
-  }
+  if (!newPassword || !confirmPassword) return showToast("Please fill both password fields.", "error");
+  if (newPassword.length < 6) return showToast("Password should be at least 6 characters.", "error");
+  if (newPassword !== confirmPassword) return showToast("Passwords do not match.", "error");
 
   const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
-
-  if (error) {
-    return showToast(error.message, "error");
-  }
+  if (error) return showToast(error.message, "error");
 
   if (box) {
     box.textContent = "Password updated successfully. You can now log in.";
@@ -386,7 +368,7 @@ function setupAdminModal() {
     if (isAdmin && currentUser?.id === ADMIN_USER_ID) {
       openModalById("adminPanelModal");
       switchAdminTab("feedback");
-      loadAdminFeedback();
+      loadAdminFeedback(true);
     } else {
       loginModal?.classList.remove("hidden");
       setTimeout(() => document.getElementById("adminEmailInput")?.focus(), 50);
@@ -420,13 +402,16 @@ function setupAdminModal() {
 function setupAdminTabs() {
   const buttons = document.querySelectorAll("[data-admin-tab]");
   buttons.forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       switchAdminTab(btn.dataset.adminTab);
+      if (btn.dataset.adminTab === "feedback") {
+        await loadAdminFeedback(true);
+      }
     });
   });
 
   const feedbackFilter = document.getElementById("adminFeedbackFilter");
-  feedbackFilter?.addEventListener("change", loadAdminFeedback);
+  feedbackFilter?.addEventListener("change", () => renderAdminFeedbackList());
 }
 
 function switchAdminTab(tabName) {
@@ -439,10 +424,6 @@ function switchAdminTab(tabName) {
     const panel = document.getElementById(`adminTabPanel${capitalize(tab)}`);
     if (panel) panel.classList.toggle("hidden", tab !== tabName);
   });
-
-  if (tabName === "feedback") {
-    loadAdminFeedback();
-  }
 }
 
 function setupEditModal() {
@@ -513,11 +494,8 @@ function setupCustomModals() {
 
   modeBtn?.addEventListener("click", async () => {
     openModalById("accountModal");
-    if (currentUser) {
-      showAccountView("active");
-    } else {
-      showAccountView("signup");
-    }
+    if (currentUser) showAccountView("active");
+    else showAccountView("signup");
     await refreshLibraryAuthUI();
   });
 
@@ -691,6 +669,7 @@ function setupKeyboardShortcut() {
       closeAdminLoginModal();
       closeModalById("adminPanelModal");
       closeModalById("deleteAccountModal");
+      closeModalById("confirmModal");
     }
 
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
@@ -900,7 +879,7 @@ async function fetchPublicTools() {
 }
 
 async function fetchFeedbackMessages() {
-  if (!isAdmin) return [];
+  if (!isAdmin || !currentUser || currentUser.id !== ADMIN_USER_ID) return [];
 
   const { data, error } = await supabaseClient
     .from("feedback_messages")
@@ -1517,19 +1496,24 @@ async function renderHome() {
   });
 }
 
-async function loadAdminFeedback() {
+async function loadAdminFeedback(force = false) {
   if (!isAdmin) return;
+  if (force || !adminFeedbackCache.length) {
+    adminFeedbackCache = await fetchFeedbackMessages();
+  }
+  renderAdminFeedbackList();
+}
 
+function renderAdminFeedbackList() {
   const list = document.getElementById("adminFeedbackList");
   const filter = document.getElementById("adminFeedbackFilter")?.value || "All";
   if (!list) return;
 
   list.innerHTML = "";
 
-  const messages = await fetchFeedbackMessages();
   const filtered = filter === "All"
-    ? messages
-    : messages.filter(item => item.type === filter);
+    ? adminFeedbackCache
+    : adminFeedbackCache.filter(item => item.type === filter);
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><strong>No feedback messages found.</strong></div>`;
@@ -1587,7 +1571,8 @@ async function loadAdminFeedback() {
       showConfirm("Delete this message?", "Are you sure you want to delete this message?", async () => {
         const { error } = await supabaseClient.from("feedback_messages").delete().eq("id", item.id);
         if (error) return showToast("Could not delete message.", "error");
-        await loadAdminFeedback();
+        adminFeedbackCache = adminFeedbackCache.filter(msg => msg.id !== item.id);
+        renderAdminFeedbackList();
         showToast("Message deleted.", "success");
       });
     });
@@ -2181,10 +2166,7 @@ function setupFeedbackModal() {
     clearFeedbackForm();
   }
 
-  openBtns.forEach(btn => {
-    btn.addEventListener("click", openFeedbackModal);
-  });
-
+  openBtns.forEach(btn => btn.addEventListener("click", openFeedbackModal));
   cancelBtn?.addEventListener("click", closeFeedbackModal);
   backdrop?.addEventListener("click", closeFeedbackModal);
   typeSelect?.addEventListener("change", updateFeedbackTypeUI);
@@ -2199,21 +2181,13 @@ function setupFeedbackModal() {
     const isSuggestTool = type === "Suggest a Tool";
 
     if (isSuggestTool) {
-      if (!toolLink) {
-        return showToast("Tool link is required for Suggest a Tool.", "error");
-      }
-      if (!isValidUrl(toolLink)) {
-        return showToast("Please enter a valid tool link.", "error");
-      }
+      if (!toolLink) return showToast("Tool link is required for Suggest a Tool.", "error");
+      if (!isValidUrl(toolLink)) return showToast("Please enter a valid tool link.", "error");
     } else {
-      if (!message) {
-        return showToast("Please write a message first!", "error");
-      }
+      if (!message) return showToast("Please write a message first!", "error");
     }
 
-    if (!supabaseClient) {
-      return showToast("Feedback service unavailable right now.", "error");
-    }
+    if (!supabaseClient) return showToast("Feedback service unavailable right now.", "error");
 
     const payload = {
       name,
@@ -2244,9 +2218,7 @@ function updateFeedbackTypeUI() {
   toolWrap?.classList.toggle("hidden", !isSuggest);
 
   if (message) {
-    message.placeholder = isSuggest
-      ? "Optional message..."
-      : "Write your message...";
+    message.placeholder = isSuggest ? "Optional message..." : "Write your message...";
   }
 }
 
