@@ -1608,33 +1608,37 @@ async function initLibraryPage() {
   logoutBtn?.addEventListener("click", handleUserLogout);
   importGuestBtn?.addEventListener("click", importGuestLibraryToAccount);
 
-  createCategoryBtn?.addEventListener("click", async () => {
-    const name = document.getElementById("privateCategoryName").value.trim();
-    if (!name) return showToast("Name required!", "error");
+createCategoryBtn?.addEventListener("click", async () => {
+  const name = document.getElementById("privateCategoryName").value.trim();
+  const description = document.getElementById("privateCategoryDesc")?.value.trim() || "";
 
-    if (currentUser) {
-      const categories = await fetchCloudCategories();
-      if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
-        return showToast("Category already exists!", "error");
-      }
+  if (!name) return showToast("Name required!", "error");
 
-      const error = await createCloudCategory(name);
-      if (error) return showToast("Could not create category", "error");
-    } else {
-      const categories = getJSON(KEYS.privateCategories);
-      if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
-        return showToast("Category already exists!", "error");
-      }
-
-      categories.push({ name });
-      setJSON(KEYS.privateCategories, categories);
+  if (currentUser) {
+    const categories = await fetchCloudCategories();
+    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+      return showToast("Category already exists!", "error");
     }
 
-    document.getElementById("privateCategoryName").value = "";
-    await renderLibrary();
-    closeModalById("quickAddModal");
-    showToast("Category created!", "success");
-  });
+    const error = await createCloudCategory(name, description);
+    if (error) return showToast("Could not create category", "error");
+  } else {
+    const categories = getJSON(KEYS.privateCategories);
+    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+      return showToast("Category already exists!", "error");
+    }
+
+    categories.push({ name, description });
+    setJSON(KEYS.privateCategories, categories);
+  }
+
+  document.getElementById("privateCategoryName").value = "";
+  const descInput = document.getElementById("privateCategoryDesc");
+  if (descInput) descInput.value = "";
+
+  await renderLibrary();
+  showToast("Category created!", "success");
+});
 
   addToolBtn?.addEventListener("click", async () => {
     const name = privateToolName.value.trim();
