@@ -933,13 +933,15 @@ async function fetchCloudTools() {
   return data || [];
 }
 
-async function createCloudCategory(name) {
+async function createCloudCategory(name, description = "") {
   const cleanName = (name || "").trim();
+  const cleanDescription = (description || "").trim();
   if (!cleanName) return new Error("Invalid category name");
 
   const { error } = await supabaseClient.from("private_categories").insert({
     user_id: currentUser.id,
-    name: cleanName
+    name: cleanName,
+    description: cleanDescription
   });
 
   return error;
