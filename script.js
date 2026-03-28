@@ -1274,14 +1274,14 @@ async function initHomePage() {
 
       if (!isAdmin) return showToast("Please log in as admin first", "error");
 
-      await supabaseClient.from("public_tools").delete().gte("id", 0);
-      await supabaseClient.from("public_categories").delete().gte("id", 0);
+      await supabaseClient.from("public_tools").delete().not("id", "is", null);
+      await supabaseClient.from("public_categories").delete().not("id", "is", null);
 
       if (data.publicCategories.length) {
         await supabaseClient.from("public_categories").insert(
           data.publicCategories.map((c, i) => ({
             name: c.name,
-            description: c.description || c.desc || "",
+            description: c.description || "",
             sort_order: c.sort_order ?? i + 1
           }))
         );
