@@ -245,26 +245,42 @@
     </div>
   </div>
 
-  <div id="quickAddModal" class="modal hidden">
-    <div class="modal-backdrop" data-close-quick-add-modal></div>
-    <div class="modal-card modal-card-wide">
-      <h3>Quick Add</h3>
-      <p>Add links and create categories without cluttering the page.</p>
+<div id="quickAddModal" class="modal hidden">
+  <div class="modal-backdrop" data-close-quick-add-modal></div>
+  <div class="modal-card modal-card-wide">
+    <h3>Quick Add</h3>
+    <p>Add links and create categories without cluttering the page.</p>
 
-      <div class="quick-add-grid">
-        <div class="subpanel">
-          <h3>Add Link</h3>
-          <div class="form-grid">
-            <input id="privateToolName" type="text" class="input" placeholder="Link name" autocomplete="off" />
-            <input id="privateToolUrl" type="url" class="input" placeholder="https://example.com" autocomplete="off" />
-            <select id="privateToolCategory" class="input select"></select>
-            <label class="check-row">
-              <input id="privateToolFav" type="checkbox" />
-              <span>Favorite</span>
-            </label>
-            <button id="addPrivateToolBtn" class="btn btn-primary">Add Link</button>
-          </div>
+    <div class="quick-add-grid">
+      <div class="subpanel">
+        <h3>Add Link</h3>
+        <div class="form-grid">
+          <input id="privateToolName" type="text" class="input" placeholder="Link name" autocomplete="off" />
+          <input id="privateToolUrl" type="url" class="input" placeholder="https://example.com" autocomplete="off" />
+          <select id="privateToolCategory" class="input select"></select>
+          <label class="check-row">
+            <input id="privateToolFav" type="checkbox" />
+            <span>Favorite</span>
+          </label>
+          <button id="addPrivateToolBtn" class="btn btn-primary">Add Link</button>
         </div>
+      </div>
+
+      <div class="subpanel">
+        <h3>Create Category</h3>
+        <div class="form-grid">
+          <input id="privateCategoryName" type="text" class="input" placeholder="Category name" autocomplete="off" />
+          <input id="privateCategoryDesc" type="text" class="input" placeholder="Category description (optional)" autocomplete="off" />
+          <button id="createPrivateCategoryBtn" class="btn btn-primary">Create Category</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions left">
+      <button id="closeQuickAddModalBtn" class="btn">Close</button>
+    </div>
+  </div>
+</div>
 <div class="subpanel">
   <h3>Create Category</h3>
   <div class="form-grid">
