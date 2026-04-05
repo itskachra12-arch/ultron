@@ -903,3 +903,36 @@ button, input, select, textarea { font: inherit; }
     width: 100%;
   }
 }
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+}
+
+#quickAddModal {
+  z-index: 10010;
+}
+
+#accountModal {
+  z-index: 10020;
+}
+
+#feedbackModal {
+  z-index: 10030;
+}
+
+#deleteAccountModal {
+  z-index: 10040;
+}
+
+#adminLoginModal {
+  z-index: 10050;
+}
+
+#adminPanelModal {
+  z-index: 10060;
+}
+
+#confirmModal {
+  z-index: 10150;
+}
