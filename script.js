@@ -2128,12 +2128,12 @@ async function deletePrivateTool(id) {
   await renderLibrary();
 }
 
-function togglePrivateFavorite(id) {
+async function togglePrivateFavorite(id) {
   const tools = getJSON(KEYS.privateTools).map(tool =>
     tool.id === id ? { ...tool, fav: !tool.fav } : tool
   );
   setJSON(KEYS.privateTools, tools);
-  renderLibrary();
+  await renderLibrary();
 }
 
 function createMiniButton(text, title, handler) {
