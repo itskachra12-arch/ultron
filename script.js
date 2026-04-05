@@ -1192,31 +1192,39 @@ async function initHomePage() {
 
   await renderHome();
 
-  createCategoryBtn?.addEventListener("click", async () => {
-    if (!isAdmin) return showToast("Please log in as admin first", "error");
+createCategoryBtn?.addEventListener("click", async () => {
+  const name = document.getElementById("privateCategoryName").value.trim();
+  const description = document.getElementById("privateCategoryDesc")?.value.trim() || "";
 
-    const name = document.getElementById("publicCategoryName").value.trim();
-    const description = document.getElementById("publicCategoryDesc").value.trim();
+  if (!name) return showToast("Name required!", "error");
 
-    if (!name) return showToast("Name required!", "error");
+  if (currentUser) {
+    const categories = await fetchCloudCategories();
+    if (categories.some(c => (c.name || "").toLowerCase() === name.toLowerCase())) {
+      return showToast("Category already exists!", "error");
+    }
 
-    const categories = await fetchPublicCategories();
-    const highestSort = categories.length ? Math.max(...categories.map(c => c.sort_order || 0)) : 0;
-
-    const { error } = await supabaseClient.from("public_categories").insert({
-      name,
-      description,
-      sort_order: highestSort + 1
-    });
-
+    const error = await createCloudCategory(name, description);
     if (error) return showToast("Could not create category", "error");
+  } else {
+    const categories = getJSON(KEYS.privateCategories, []);
+    if (categories.some(c => (c.name || "").toLowerCase() === name.toLowerCase())) {
+      return showToast("Category already exists!", "error");
+    }
 
-    document.getElementById("publicCategoryName").value = "";
-    document.getElementById("publicCategoryDesc").value = "";
+    categories.push({ name, description });
+    setJSON(KEYS.privateCategories, categories);
+  }
 
-    await renderHome();
+  document.getElementById("privateCategoryName").value = "";
+  const descInput = document.getElementById("privateCategoryDesc");
+  if (descInput) descInput.value = "";
+
+  setTimeout(async () => {
+    await renderLibrary();
     showToast("Category created!", "success");
-  });
+  }, 150);
+});
 
   addToolBtn?.addEventListener("click", async () => {
     if (!isAdmin) return showToast("Please log in as admin first", "error");
