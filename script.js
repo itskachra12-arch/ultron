@@ -1226,38 +1226,42 @@ createCategoryBtn?.addEventListener("click", async () => {
   }, 150);
 });
 
-  addToolBtn?.addEventListener("click", async () => {
-    if (!isAdmin) return showToast("Please log in as admin first", "error");
+addToolBtn?.addEventListener("click", async () => {
+  const name = privateToolName.value.trim();
+  const link = sanitizeUrl(privateToolUrl.value.trim());
+  const categorySelect = document.getElementById("privateToolCategory");
+  const cat = categorySelect?.value || "";
+  const fav = document.getElementById("privateToolFav").checked;
 
-    const name = publicToolName.value.trim();
-    const link = sanitizeUrl(publicToolUrl.value.trim());
-    const cat = document.getElementById("publicToolCategory").value;
-    const fav = document.getElementById("publicToolFav").checked;
+  if (!name) return showToast("Name required!", "error");
+  if (!isValidUrl(link)) return showToast("Please enter a valid URL!", "error");
+  if (!cat) return showToast("Please select a category!", "error");
 
-    if (!name) return showToast("Name required!", "error");
-    if (!isValidUrl(link)) return showToast("Please enter a valid URL!", "error");
-    if (!cat) return showToast("Please select a category!", "error");
+  const selectedCategory = cat;
 
-    const tools = await fetchPublicTools();
-    const highestSort = tools.length ? Math.max(...tools.map(t => t.sort_order || 0)) : 0;
-
-    const { error } = await supabaseClient.from("public_tools").insert({
-      name,
-      link,
-      cat,
-      fav,
-      sort_order: highestSort + 1
-    });
-
+  if (currentUser) {
+    const error = await createCloudTool({ name, link, cat, fav });
     if (error) return showToast("Could not add tool", "error");
+  } else {
+    const tools = getJSON(KEYS.privateTools, []);
+    tools.push({ id: generateId(), name, link, cat, fav });
+    setJSON(KEYS.privateTools, tools);
+  }
 
-    publicToolName.value = "";
-    publicToolUrl.value = "";
-    document.getElementById("publicToolFav").checked = false;
+  privateToolName.value = "";
+  privateToolUrl.value = "";
+  document.getElementById("privateToolFav").checked = false;
 
-    await renderHome();
+  setTimeout(async () => {
+    await renderLibrary();
+
+    const refreshedCategorySelect = document.getElementById("privateToolCategory");
+    if (refreshedCategorySelect) refreshedCategorySelect.value = selectedCategory;
+
+    privateToolName.focus();
     showToast("Tool added!", "success");
-  });
+  }, 150);
+});
 
   publicToolUrl?.addEventListener("input", () => {
     if (!publicToolName.value.trim() && publicToolUrl.value.trim()) {
