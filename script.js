@@ -605,11 +605,17 @@ function resetDeleteAccountModal() {
     box.classList.add("hidden");
   }
 }
-
 function openModalById(id) {
   const modal = document.getElementById(id);
-  if (modal) modal.classList.remove("hidden");
+  if (!modal) return;
+
+  document.querySelectorAll(".modal").forEach(m => {
+    if (m.id !== id) m.classList.add("hidden");
+  });
+
+  modal.classList.remove("hidden");
 }
+
 
 function closeModalById(id) {
   const modal = document.getElementById(id);
