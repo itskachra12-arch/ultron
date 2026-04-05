@@ -2122,10 +2122,10 @@ function createLinkCard(tool, type, showCategory = false) {
   return card;
 }
 
-function deletePrivateTool(id) {
+async function deletePrivateTool(id) {
   const tools = getJSON(KEYS.privateTools).filter(tool => tool.id !== id);
   setJSON(KEYS.privateTools, tools);
-  renderLibrary();
+  await renderLibrary();
 }
 
 function togglePrivateFavorite(id) {
