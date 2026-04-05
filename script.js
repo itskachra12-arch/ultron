@@ -1973,10 +1973,10 @@ async function renderLibrary() {
   });
 }
 
-function deletePrivateCategory(categoryName) {
+async function deletePrivateCategory(categoryName) {
   setJSON(KEYS.privateCategories, getJSON(KEYS.privateCategories).filter(c => c.name !== categoryName));
   setJSON(KEYS.privateTools, getJSON(KEYS.privateTools).filter(t => t.cat !== categoryName));
-  renderLibrary();
+  await renderLibrary();
   showToast("Category deleted!", "success");
 }
 
