@@ -661,16 +661,17 @@ function setupKeyboardShortcut() {
       search?.focus();
     }
 
-    if (e.key === "Escape") {
-      closeModalById("accountModal");
-      closeModalById("quickAddModal");
-      closeModalById("guestImportPromptModal");
-      closeAdminLoginModal();
-      closeModalById("adminPanelModal");
-      closeModalById("deleteAccountModal");
-      closeModalById("confirmModal");
-    }
-
+ if (e.key === "Escape") {
+  closeModalById("accountModal");
+  closeModalById("quickAddModal");
+  closeModalById("guestImportPromptModal");
+  closeModalById("feedbackModal");
+  closeAdminLoginModal();
+  closeModalById("adminPanelModal");
+  closeModalById("deleteAccountModal");
+  closeModalById("confirmModal");
+  closeModalById("editToolModal");
+}
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
       e.preventDefault();
       if (document.body.dataset.page === "home") {
